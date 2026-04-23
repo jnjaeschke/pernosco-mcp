@@ -17,4 +17,6 @@ export interface PernoscoBackend {
   getStatus(): Promise<SessionStatus>;
 
   close(): Promise<void>;
+
+  notebookRead(): Promise<unknown>;
 }

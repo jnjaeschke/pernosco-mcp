@@ -90,6 +90,10 @@ class ExtensionBackend implements PernoscoBackend {
   async close(): Promise<void> {
     this.rejectAll(new ConnectionError('Backend closed'));
   }
+
+  notebookRead(): Promise<unknown> {
+    return this.query<unknown>('storageDump', {});
+  }
 }
 
 // ─── ClientSession ──────────────────────────────────────────────────────────

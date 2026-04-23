@@ -99,6 +99,16 @@ function handleDaemonMessage(msg) {
       return;
     }
 
+    case 'storageDump': {
+      const entry = findTabByTraceId(msg.traceId);
+      if (!entry) return;
+      const localReplyId = `reply${nextMsgId++}`;
+      const msgId = `msg${nextMsgId++}`;
+      entry.pendingReplies.set(localReplyId, msg.replyId);
+      entry.port.postMessage({ type: 'storageDump', msgId, replyId: localReplyId, payload: {} });
+      return;
+    }
+
     case 'rangeQuery':
     case 'simpleQuery': {
       const entry = findTabByTraceId(msg.traceId);
