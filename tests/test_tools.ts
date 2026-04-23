@@ -53,12 +53,13 @@ describe('session_connect', () => {
     expect(daemon.bindClient).toHaveBeenCalledWith('c1', 'ps0J9-pJ2TxCDiz5XJu-2g');
   });
 
-  it('requests tab open when tab not found', async () => {
+  it('requests tab open but does NOT bind when tab not found', async () => {
     const daemon = mockDaemon({ hasTab: vi.fn().mockReturnValue(false) });
     await handleToolCall(daemon, 'c1', 'session_connect', {
       url: 'https://pernos.co/debug/ps0J9-abc/index.html',
     });
     expect(daemon.requestOpenTab).toHaveBeenCalledWith('https://pernos.co/debug/ps0J9-abc/index.html');
+    expect(daemon.bindClient).not.toHaveBeenCalled();
   });
 });
 

@@ -7,7 +7,7 @@ import type { JSONRPCMessage, MessageExtraInfo } from '@modelcontextprotocol/sdk
 import fs from 'fs/promises';
 import { CONFIG_DIR, SERVER_JSON } from './spawn.js';
 import { TOOL_DEFS, handleToolCall } from './tools.js';
-import { ConnectionError, TraceNotFound } from './errors.js';
+import { ConnectionError, SessionNotConnected, TraceNotFound } from './errors.js';
 import type { PernoscoBackend } from './backend.js';
 import type { Focus, PmlRow, SessionStatus } from './models.js';
 
@@ -189,6 +189,10 @@ export class Daemon {
   private handleExtensionConnect(ws: WebSocket): void {
     if (this.extensionWs) {
       try { this.extensionWs.close(); } catch {}
+      for (const backend of this.backends.values()) {
+        backend.rejectAll(new ConnectionError('Extension reconnected'));
+      }
+      this.backends.clear();
     }
     this.extensionWs = ws;
 
@@ -208,14 +212,23 @@ export class Daemon {
       this.resetIdleTimer();
     });
 
-    ws.send(JSON.stringify({ type: 'listTabs', replyId: 'startup' }));
+    ws.send(JSON.stringify({ type: 'listTabs', replyId: 'startup-list' }));
   }
 
   private handleExtensionMessage(msg: Record<string, unknown>): void {
     switch (msg.type) {
+      case 'tabList': {
+        const tabs = (msg.tabs as Array<{ traceId: string }> | undefined) ?? [];
+        for (const { traceId } of tabs) {
+          if (!this.backends.has(traceId)) {
+            this.backends.set(traceId, new ExtensionBackend(this, traceId));
+          }
+        }
+        break;
+      }
       case 'reply': {
         const replyId = String(msg.replyId ?? '');
-        if (replyId === 'startup') return;
+        if (replyId === 'startup-list') return;
         // replyId format: "{traceId}::r{N}" — extract traceId from prefix
         const sep = replyId.indexOf('::r');
         if (sep !== -1) {
@@ -249,7 +262,7 @@ export class Daemon {
 
   getBackend(clientId: string): PernoscoBackend {
     const session = this.clients.get(clientId);
-    if (!session?.traceId) throw new Error('No session connected. Call session_connect first.');
+    if (!session?.traceId) throw new SessionNotConnected();
     const backend = this.backends.get(session.traceId);
     if (!backend) throw new TraceNotFound(session.traceId);
     return backend;

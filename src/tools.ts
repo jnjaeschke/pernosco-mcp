@@ -70,8 +70,7 @@ async function sessionConnect(daemon: Daemon, clientId: string, args: Record<str
   if (!daemon.hasTab(traceId)) {
     const fullUrl = url.startsWith('http') ? url : `https://pernos.co/debug/${traceId}/index.html`;
     daemon.requestOpenTab(fullUrl);
-    daemon.bindClient(clientId, traceId);
-    return ok(`Connecting to trace ${traceId}. Opening tab in Firefox — please wait a moment for the tab to load, then retry if queries fail.`);
+    return ok(`Opening trace ${traceId} in Firefox. Call session_connect again once the tab has loaded.`);
   }
 
   daemon.bindClient(clientId, traceId);
