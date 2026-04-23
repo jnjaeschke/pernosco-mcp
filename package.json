@@ -6,7 +6,6 @@
   "bin": {
     "pernosco-mcp": "./dist/cli.js"
   },
-  "main": "./dist/daemon.js",
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
@@ -15,16 +14,16 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "proper-lockfile": "^4.1.2",
-    "uuid": "^11.0.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@types/proper-lockfile": "^4.1.4",
-    "@types/uuid": "^10.0.0",
     "@types/ws": "^8.5.12",
     "typescript": "^5.8.0",
     "vitest": "^4.1.5"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=24"
+  }
 }
