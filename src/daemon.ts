@@ -75,8 +75,8 @@ class ExtensionBackend implements PernoscoBackend {
     return this.query('rangeQuery', { name, limit, mixArgs: { params } });
   }
 
-  simpleQuery(name: string, params: Record<string, unknown>): Promise<PmlRow[]> {
-    return this.query('simpleQuery', { name, mixArgs: { params } });
+  simpleQuery(name: string, mixArgs: Record<string, unknown>): Promise<PmlRow[]> {
+    return this.query('simpleQuery', { name, mixArgs });
   }
 
   async setFocus(focus: Focus): Promise<void> {
@@ -108,6 +108,7 @@ export class Daemon {
   private backends = new Map<string, ExtensionBackend>();
   private extensionWs: WebSocket | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastResults = new Map<string, PmlRow[]>();
   private wss!: WebSocketServer;
 
   async start(): Promise<number> {
@@ -284,6 +285,20 @@ export class Daemon {
 
   listTabs(): string[] {
     return Array.from(this.backends.keys());
+  }
+
+  storeQueryResults(clientId: string, rows: PmlRow[]): void {
+    this.lastResults.set(clientId, rows);
+  }
+
+  getQueryFocus(clientId: string, index: number): Focus | null {
+    const rows = this.lastResults.get(clientId);
+    if (!rows) return null;
+    const row = rows[index - 1];
+    if (row == null) return null;
+    const r = row as Record<string, unknown>;
+    const items = r?.items as Array<Record<string, unknown>> | undefined;
+    return (items?.[0]?.focus as Focus | undefined) ?? null;
   }
 
   hasTab(traceId: string): boolean {
