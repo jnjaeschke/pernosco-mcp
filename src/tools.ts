@@ -318,7 +318,7 @@ async function currentTasks(daemon: Daemon, clientId: string): Promise<ToolResul
 async function notebookRead(daemon: Daemon, clientId: string): Promise<ToolResult> {
   const backend = daemon.getBackend(clientId);
   const data = await backend.notebookRead();
-  if (!data || typeof data !== 'object' || Object.keys(data as object).length === 0) {
+  if (!data || typeof data !== 'object') {
     return ok('No notebook entries found.');
   }
   const entries = Object.entries(data as Record<string, unknown>)

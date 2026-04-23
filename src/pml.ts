@@ -97,6 +97,7 @@ function extractAnnotationLine(row: unknown): { lineNumber: number; count: numbe
   if (a && typeof a.lineNumber === 'number') {
     return {
       lineNumber: a.lineNumber as number,
+      // PML attribute node: if count is absent, the line executed but count wasn't tracked → assume 1
       count: typeof a.count === 'number' ? a.count : 1,
       strength: typeof a.strength === 'string' ? a.strength : 'strong',
     };
