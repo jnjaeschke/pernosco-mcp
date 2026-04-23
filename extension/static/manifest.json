@@ -1,0 +1,26 @@
+{
+  "manifest_version": 2,
+  "name": "pernosco-mcp",
+  "version": "0.1.0",
+  "description": "Bridges Claude Code to Pernosco debugging sessions via pernosco-mcp daemon",
+  "permissions": [
+    "tabs",
+    "nativeMessaging"
+  ],
+  "content_scripts": [{
+    "matches": ["https://pernos.co/debug/*"],
+    "js": ["inject.js"],
+    "run_at": "document_idle"
+  }],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "browser_action": {
+    "default_title": "pernosco-mcp"
+  },
+  "applications": {
+    "gecko": {
+      "id": "pernosco-mcp@mozilla.org"
+    }
+  }
+}
