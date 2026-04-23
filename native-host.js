@@ -6,43 +6,60 @@ function readNativeMessage(stream) {
     const headerBuf = Buffer.alloc(4);
     let headerBytesRead = 0;
 
+    function cleanup() {
+      stream.removeListener('readable', readHeader);
+      stream.removeListener('error', onError);
+      stream.removeListener('end', onEnd);
+    }
+    function onError(err) { cleanup(); reject(err); }
+    function onEnd() { cleanup(); reject(new Error('stdin closed before complete message')); }
+
     function readHeader() {
       const chunk = stream.read(4 - headerBytesRead);
       if (!chunk) return;
       chunk.copy(headerBuf, headerBytesRead);
       headerBytesRead += chunk.length;
       if (headerBytesRead < 4) return;
-      stream.removeListener('readable', readHeader);
-      const msgLen = headerBuf.readUInt32LE(0);
-      readBody(msgLen);
+      cleanup();
+      readBody(headerBuf.readUInt32LE(0));
     }
 
     function readBody(msgLen) {
       const bodyBuf = Buffer.alloc(msgLen);
       let bodyBytesRead = 0;
 
-      function onReadable() {
+      function onBodyReadable() {
         const chunk = stream.read(msgLen - bodyBytesRead);
         if (!chunk) return;
         chunk.copy(bodyBuf, bodyBytesRead);
         bodyBytesRead += chunk.length;
         if (bodyBytesRead < msgLen) return;
-        stream.removeListener('readable', onReadable);
-        stream.removeListener('error', reject);
-        stream.removeListener('end', onEnd);
+        stream.removeListener('readable', onBodyReadable);
+        stream.removeListener('error', onBodyError);
+        stream.removeListener('end', onBodyEnd);
         resolve(JSON.parse(bodyBuf.toString('utf8')));
       }
 
-      function onEnd() { reject(new Error('stdin closed before message body')); }
-      stream.on('readable', onReadable);
-      stream.on('error', reject);
-      stream.on('end', onEnd);
-      onReadable();
+      function onBodyError(err) {
+        stream.removeListener('readable', onBodyReadable);
+        stream.removeListener('end', onBodyEnd);
+        reject(err);
+      }
+      function onBodyEnd() {
+        stream.removeListener('readable', onBodyReadable);
+        stream.removeListener('error', onBodyError);
+        reject(new Error('stdin closed before message body'));
+      }
+
+      stream.on('readable', onBodyReadable);
+      stream.on('error', onBodyError);
+      stream.on('end', onBodyEnd);
+      onBodyReadable();
     }
 
     stream.on('readable', readHeader);
-    stream.once('error', reject);
-    stream.once('end', () => reject(new Error('stdin closed before message header')));
+    stream.on('error', onError);
+    stream.on('end', onEnd);
   });
 }
 

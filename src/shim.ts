@@ -22,7 +22,7 @@ export async function runShim(port: number): Promise<void> {
   });
 
   ws.on('close', () => process.exit(0));
-  ws.on('error', () => process.exit(1));
+  ws.on('error', (err) => { console.error('pernosco-mcp: websocket error:', err.message); process.exit(1); });
 
   // stdin → WS
   const rl = createInterface({ input: process.stdin, terminal: false });
