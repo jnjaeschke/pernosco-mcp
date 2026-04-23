@@ -12,6 +12,7 @@ function readNativeMessage(stream) {
       chunk.copy(headerBuf, headerBytesRead);
       headerBytesRead += chunk.length;
       if (headerBytesRead < 4) return;
+      stream.removeListener('readable', readHeader);
       const msgLen = headerBuf.readUInt32LE(0);
       readBody(msgLen);
     }
@@ -39,7 +40,7 @@ function readNativeMessage(stream) {
       onReadable();
     }
 
-    stream.once('readable', readHeader);
+    stream.on('readable', readHeader);
     stream.once('error', reject);
     stream.once('end', () => reject(new Error('stdin closed before message header')));
   });
