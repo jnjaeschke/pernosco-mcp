@@ -5,6 +5,7 @@ const PERNOSCO_URL_PATTERN = /^https:\/\/pernos\.co\/debug\/([^/]+)\//;
 let daemonWs = null;
 let daemonPort = null;
 let pendingMessages = [];
+const MAX_PENDING = 200;
 let nextMsgId = 0;
 
 // Map: tabId → { traceId, port, pendingReplies: Map<localReplyId, daemonReplyId> }
@@ -60,7 +61,7 @@ function connectDaemon(port) {
 function sendToDaemon(msg) {
   if (daemonWs && daemonWs.readyState === WebSocket.OPEN) {
     daemonWs.send(JSON.stringify(msg));
-  } else {
+  } else if (pendingMessages.length < MAX_PENDING) {
     pendingMessages.push(msg);
   }
 }
@@ -136,7 +137,9 @@ function connectToTab(tabId, traceId) {
   });
 
   port.onDisconnect.addListener(() => {
+    if (!tabs.has(tabId)) return;  // tabs.onRemoved already handled this
     tabs.delete(tabId);
+    entry.pendingReplies.clear();  // daemon rejectAll fires via tabClosed below
     sendToDaemon({ type: 'tabClosed', traceId });
   });
 
