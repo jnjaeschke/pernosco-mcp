@@ -1,5 +1,5 @@
 import type { Daemon } from './daemon.js';
-import { pmlRowsToText } from './pml.js';
+import { pmlRowsToText, formatStdoutStderr, formatDynamicAnnotations } from './pml.js';
 import type { Focus } from './models.js';
 
 export const TOOL_DEFS = [
@@ -86,6 +86,62 @@ export const TOOL_DEFS = [
       required: ['query'],
     },
   },
+  {
+    name: 'watchpoint_history',
+    description: 'Get complete write history for a memory address across the trace (reads all writes before and after current focus)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        address: { type: 'string', description: 'Memory address in hex, e.g. "0x7fff1234abcd"' },
+        type: { type: 'string', description: 'C++ type of the value, e.g. "uint64_t", "int32_t", "bool"' },
+      },
+      required: ['address', 'type'],
+    },
+  },
+  {
+    name: 'stdout_stderr',
+    description: 'Get all stdout/stderr output across the trace. Results include event IDs — use goto(index) to navigate to where output was printed.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Max results per direction (default 200)' },
+      },
+    },
+  },
+  {
+    name: 'current_tasks',
+    description: 'Get active processes and threads at the current focus moment',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'notebook_read',
+    description: 'Read Pernosco notebook annotations saved in this session',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'find_breakpoint_hits',
+    description: 'Find all hits of a specific source line. Use when you have a file:line from a stack trace or crash report.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', description: 'Source file path or URL as it appears in Pernosco, e.g. "nsDocShell.cpp"' },
+        line: { type: 'number', description: 'Line number (1-based)' },
+        print_exprs: { type: 'string', description: 'Semicolon-delimited C++ expressions to evaluate at each hit' },
+        limit: { type: 'number', description: 'Max results per direction (default 50)' },
+      },
+      required: ['file', 'line'],
+    },
+  },
+  {
+    name: 'dynamic_annotations',
+    description: 'Show which lines of the current source file executed at the current focus, with execution counts for loops. Essential for understanding which code paths and branches ran.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        source_url: { type: 'string', description: 'Source URL to annotate (defaults to current focus source from session_status)' },
+      },
+    },
+  },
 ];
 
 type ToolResult = { content: Array<{ type: 'text'; text: string }>; isError?: boolean };
@@ -108,6 +164,12 @@ export async function handleToolCall(
       case 'goto': return await gotoTool(daemon, clientId, args);
       case 'task_tree': return await taskTreeTool(daemon, clientId);
       case 'search': return await searchTool(daemon, clientId, args);
+      case 'watchpoint_history': return await watchpointHistory(daemon, clientId, args);
+      case 'stdout_stderr': return await stdoutStderr(daemon, clientId, args);
+      case 'current_tasks': return await currentTasks(daemon, clientId);
+      case 'notebook_read': return await notebookRead(daemon, clientId);
+      case 'find_breakpoint_hits': return await findBreakpointHits(daemon, clientId, args);
+      case 'dynamic_annotations': return await dynamicAnnotations(daemon, clientId, args);
       default: return err(`Unknown tool: ${name}`);
     }
   } catch (e) {
@@ -226,4 +288,79 @@ async function searchTool(daemon: Daemon, clientId: string, args: Record<string,
   const rows = await backend.simpleQuery('search', { input: query, maxResults });
   daemon.storeQueryResults(clientId, rows);
   return ok(pmlRowsToText(rows));
+}
+
+async function watchpointHistory(daemon: Daemon, clientId: string, args: Record<string, unknown>): Promise<ToolResult> {
+  const address = String(args.address ?? '');
+  const type = String(args.type ?? '');
+  const limit = typeof args.limit === 'number' ? args.limit : 100;
+  const backend = daemon.getBackend(clientId);
+  const rows = await backend.rangeQuery('watchpoint', { address, type }, limit);
+  daemon.storeQueryResults(clientId, rows);
+  const count = rows.length;
+  return ok(`${count} write${count !== 1 ? 's' : ''} to ${address} (${type}):\n\n${pmlRowsToText(rows)}`);
+}
+
+async function stdoutStderr(daemon: Daemon, clientId: string, args: Record<string, unknown>): Promise<ToolResult> {
+  const limit = typeof args.limit === 'number' ? args.limit : 200;
+  const backend = daemon.getBackend(clientId);
+  const rows = await backend.rangeQuery('stdouterr', {}, limit);
+  daemon.storeQueryResults(clientId, rows);
+  return ok(formatStdoutStderr(rows));
+}
+
+async function currentTasks(daemon: Daemon, clientId: string): Promise<ToolResult> {
+  const backend = daemon.getBackend(clientId);
+  const rows = await backend.simpleQuery('current-tasks', {});
+  return ok(pmlRowsToText(rows));
+}
+
+async function notebookRead(daemon: Daemon, clientId: string): Promise<ToolResult> {
+  const backend = daemon.getBackend(clientId);
+  const data = await backend.notebookRead();
+  if (!data || typeof data !== 'object' || Object.keys(data as object).length === 0) {
+    return ok('No notebook entries found.');
+  }
+  const entries = Object.entries(data as Record<string, unknown>)
+    .filter(([key]) => key.startsWith('notebook/'))
+    .map(([, value]) => {
+      const v = value as Record<string, unknown>;
+      const created = v?.create as Record<string, unknown> | undefined;
+      const item = created?.value as Record<string, unknown> | undefined;
+      const focus = item?.focus as Record<string, unknown> | undefined;
+      const moment = focus?.moment as { event: number; instr: number } | undefined;
+      const text = typeof item?.text === 'string' ? item.text : null;
+      const parts: string[] = [];
+      if (moment) parts.push(`event=${moment.event}`);
+      if (text) parts.push(`"${text}"`);
+      return parts.join('  ') || JSON.stringify(value);
+    });
+  if (entries.length === 0) return ok('No notebook entries found.');
+  return ok(`Notebook entries:\n${entries.map((e, i) => `[${i + 1}] ${e}`).join('\n')}`);
+}
+
+async function findBreakpointHits(daemon: Daemon, clientId: string, args: Record<string, unknown>): Promise<ToolResult> {
+  const file = String(args.file ?? '');
+  const line = typeof args.line === 'number' ? args.line : 0;
+  const limit = typeof args.limit === 'number' ? args.limit : 50;
+  const params: Record<string, unknown> = { url: file, points: [{ l: line, c: 0 }] };
+  if (args.print_exprs) params.print = String(args.print_exprs);
+  const backend = daemon.getBackend(clientId);
+  const rows = await backend.rangeQuery('breakpoint', params, limit);
+  daemon.storeQueryResults(clientId, rows);
+  const count = rows.length;
+  return ok(`Found ${count} hit${count !== 1 ? 's' : ''} at ${file}:${line}:\n\n${pmlRowsToText(rows)}`);
+}
+
+async function dynamicAnnotations(daemon: Daemon, clientId: string, args: Record<string, unknown>): Promise<ToolResult> {
+  const backend = daemon.getBackend(clientId);
+  let sourceUrl = typeof args.source_url === 'string' ? args.source_url : null;
+  if (!sourceUrl) {
+    const status = await backend.getStatus();
+    sourceUrl = status.source?.url ?? null;
+  }
+  if (!sourceUrl) return err('No source URL available. Navigate to a source location first (use stack or goto), or provide source_url explicitly.');
+  const rows = await backend.simpleQuery('dynamicAnnotations', { source: sourceUrl });
+  const file = sourceUrl.split('/').pop() ?? sourceUrl;
+  return ok(`Dynamic annotations for ${file}:\n\n${formatDynamicAnnotations(rows)}`);
 }

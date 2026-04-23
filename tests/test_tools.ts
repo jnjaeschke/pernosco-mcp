@@ -281,3 +281,151 @@ describe('search', () => {
     expect(mockBackend.simpleQuery).toHaveBeenCalledWith('search', { input: 'Foo', maxResults: 20 });
   });
 });
+
+// ─── Phase 3 tools ───────────────────────────────────────────────────────────
+
+describe('TOOL_DEFS Phase 3', () => {
+  for (const name of ['watchpoint_history', 'stdout_stderr', 'current_tasks', 'notebook_read', 'find_breakpoint_hits', 'dynamic_annotations']) {
+    it(`contains ${name}`, () => {
+      expect(TOOL_DEFS.some((t: unknown) => (t as { name: string }).name === name)).toBe(true);
+    });
+  }
+});
+
+describe('watchpoint_history', () => {
+  it('calls rangeQuery with watchpoint params', async () => {
+    const mockBackend = { rangeQuery: vi.fn().mockResolvedValue([]), simpleQuery: vi.fn(), setFocus: vi.fn(), getStatus: vi.fn(), close: vi.fn(), notebookRead: vi.fn() };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+      storeQueryResults: vi.fn(),
+    });
+    await handleToolCall(daemon, 'c1', 'watchpoint_history', { address: '0x7fff1234', type: 'uint64_t' });
+    expect(mockBackend.rangeQuery).toHaveBeenCalledWith('watchpoint', { address: '0x7fff1234', type: 'uint64_t' }, 100);
+  });
+});
+
+describe('stdout_stderr', () => {
+  it('calls rangeQuery stdouterr and formats with event IDs', async () => {
+    const rows = [
+      { items: [{ focus: { moment: { event: 100, instr: 0 } }, pml: { t: 'inline', c: ['hello'] } }] },
+    ];
+    const mockBackend = { rangeQuery: vi.fn().mockResolvedValue(rows), simpleQuery: vi.fn(), setFocus: vi.fn(), getStatus: vi.fn(), close: vi.fn(), notebookRead: vi.fn() };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+      storeQueryResults: vi.fn(),
+    });
+    const result = await handleToolCall(daemon, 'c1', 'stdout_stderr', {});
+    expect(mockBackend.rangeQuery).toHaveBeenCalledWith('stdouterr', {}, 200);
+    expect(result.content[0].text).toContain('event=100');
+    expect(result.content[0].text).toContain('hello');
+  });
+});
+
+describe('current_tasks', () => {
+  it('calls simpleQuery current-tasks', async () => {
+    const mockBackend = { rangeQuery: vi.fn(), simpleQuery: vi.fn().mockResolvedValue([]), setFocus: vi.fn(), getStatus: vi.fn(), close: vi.fn(), notebookRead: vi.fn() };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+    });
+    await handleToolCall(daemon, 'c1', 'current_tasks', {});
+    expect(mockBackend.simpleQuery).toHaveBeenCalledWith('current-tasks', {});
+  });
+});
+
+describe('notebook_read', () => {
+  it('calls notebookRead and formats entries', async () => {
+    const storageData = {
+      'notebook/123': { create: { value: { focus: { moment: { event: 500, instr: 0 } }, text: 'Root cause here' } } },
+    };
+    const mockBackend = { rangeQuery: vi.fn(), simpleQuery: vi.fn(), setFocus: vi.fn(), getStatus: vi.fn(), close: vi.fn(), notebookRead: vi.fn().mockResolvedValue(storageData) };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+    });
+    const result = await handleToolCall(daemon, 'c1', 'notebook_read', {});
+    expect(mockBackend.notebookRead).toHaveBeenCalled();
+    expect(result.content[0].text).toBeTruthy();
+  });
+
+  it('returns empty message when no entries', async () => {
+    const mockBackend = { rangeQuery: vi.fn(), simpleQuery: vi.fn(), setFocus: vi.fn(), getStatus: vi.fn(), close: vi.fn(), notebookRead: vi.fn().mockResolvedValue({}) };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+    });
+    const result = await handleToolCall(daemon, 'c1', 'notebook_read', {});
+    expect(result.content[0].text).toContain('No');
+  });
+});
+
+describe('find_breakpoint_hits', () => {
+  it('calls rangeQuery breakpoint with file and line', async () => {
+    const mockBackend = { rangeQuery: vi.fn().mockResolvedValue([]), simpleQuery: vi.fn(), setFocus: vi.fn(), getStatus: vi.fn(), close: vi.fn(), notebookRead: vi.fn() };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+      storeQueryResults: vi.fn(),
+    });
+    await handleToolCall(daemon, 'c1', 'find_breakpoint_hits', { file: 'nsDocShell.cpp', line: 4521 });
+    expect(mockBackend.rangeQuery).toHaveBeenCalledWith(
+      'breakpoint',
+      { url: 'nsDocShell.cpp', points: [{ l: 4521, c: 0 }] },
+      50
+    );
+  });
+
+  it('includes print_exprs when provided', async () => {
+    const mockBackend = { rangeQuery: vi.fn().mockResolvedValue([]), simpleQuery: vi.fn(), setFocus: vi.fn(), getStatus: vi.fn(), close: vi.fn(), notebookRead: vi.fn() };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+      storeQueryResults: vi.fn(),
+    });
+    await handleToolCall(daemon, 'c1', 'find_breakpoint_hits', { file: 'nsDocShell.cpp', line: 4521, print_exprs: 'this->mURI' });
+    expect(mockBackend.rangeQuery).toHaveBeenCalledWith(
+      'breakpoint',
+      { url: 'nsDocShell.cpp', points: [{ l: 4521, c: 0 }], print: 'this->mURI' },
+      50
+    );
+  });
+});
+
+describe('dynamic_annotations', () => {
+  it('calls simpleQuery dynamicAnnotations with source url from status', async () => {
+    const mockBackend = {
+      rangeQuery: vi.fn(),
+      simpleQuery: vi.fn().mockResolvedValue([]),
+      setFocus: vi.fn(),
+      getStatus: vi.fn().mockResolvedValue({ focus: { moment: { event: 100, instr: 0 } }, source: { url: 'https://example.com/foo.cpp' } }),
+      close: vi.fn(),
+      notebookRead: vi.fn(),
+    };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+    });
+    await handleToolCall(daemon, 'c1', 'dynamic_annotations', {});
+    expect(mockBackend.simpleQuery).toHaveBeenCalledWith('dynamicAnnotations', { source: 'https://example.com/foo.cpp' });
+  });
+
+  it('uses provided source_url when given', async () => {
+    const mockBackend = {
+      rangeQuery: vi.fn(),
+      simpleQuery: vi.fn().mockResolvedValue([]),
+      setFocus: vi.fn(),
+      getStatus: vi.fn(),
+      close: vi.fn(),
+      notebookRead: vi.fn(),
+    };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+    });
+    await handleToolCall(daemon, 'c1', 'dynamic_annotations', { source_url: 'https://example.com/bar.cpp' });
+    expect(mockBackend.simpleQuery).toHaveBeenCalledWith('dynamicAnnotations', { source: 'https://example.com/bar.cpp' });
+    expect(mockBackend.getStatus).not.toHaveBeenCalled();
+  });
+});
