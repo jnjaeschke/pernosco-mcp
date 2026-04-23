@@ -297,6 +297,7 @@ export class Daemon {
     const row = rows[index - 1];
     if (row == null) return null;
     const r = row as Record<string, unknown>;
+    // PML rows have structure { items: [{ focus, pml }] } per mozsearch-bridge protocol
     const items = r?.items as Array<Record<string, unknown>> | undefined;
     return (items?.[0]?.focus as Focus | undefined) ?? null;
   }
