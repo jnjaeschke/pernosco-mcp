@@ -10,6 +10,8 @@ function mockDaemon(overrides: Partial<Record<keyof Daemon, unknown>> = {}): Dae
     listTabs: vi.fn().mockReturnValue([]),
     hasTab: vi.fn().mockReturnValue(false),
     requestOpenTab: vi.fn(),
+    storeQueryResults: vi.fn(),
+    getQueryFocus: vi.fn().mockReturnValue(null),
     getBackend: vi.fn().mockReturnValue({
       getStatus: vi.fn().mockResolvedValue({
         focus: { moment: { event: 100, instr: 50 } },
@@ -99,5 +101,183 @@ describe('session_disconnect', () => {
     const daemon = mockDaemon({ getClientTraceId: vi.fn().mockReturnValue('trace1') });
     await handleToolCall(daemon, 'c1', 'session_disconnect', {});
     expect(daemon.unbindClient).toHaveBeenCalledWith('c1');
+  });
+});
+
+// ─── Phase 2 tools ───────────────────────────────────────────────────────────
+
+const fakePmlRows = [
+  { items: [{ focus: { moment: { event: 200, instr: 10 } }, pml: { t: 'inline', c: ['nsDocShell::LoadURI(...)'] } }] },
+  { items: [{ focus: { moment: { event: 300, instr: 20 } }, pml: { t: 'inline', c: ['nsDocShell::LoadURI(...)'] } }] },
+];
+
+describe('TOOL_DEFS Phase 2', () => {
+  it('contains find_executions', () => {
+    expect(TOOL_DEFS.some((t: unknown) => (t as { name: string }).name === 'find_executions')).toBe(true);
+  });
+  it('contains stack', () => {
+    expect(TOOL_DEFS.some((t: unknown) => (t as { name: string }).name === 'stack')).toBe(true);
+  });
+  it('contains evaluate', () => {
+    expect(TOOL_DEFS.some((t: unknown) => (t as { name: string }).name === 'evaluate')).toBe(true);
+  });
+  it('contains goto', () => {
+    expect(TOOL_DEFS.some((t: unknown) => (t as { name: string }).name === 'goto')).toBe(true);
+  });
+  it('contains task_tree', () => {
+    expect(TOOL_DEFS.some((t: unknown) => (t as { name: string }).name === 'task_tree')).toBe(true);
+  });
+  it('contains search', () => {
+    expect(TOOL_DEFS.some((t: unknown) => (t as { name: string }).name === 'search')).toBe(true);
+  });
+});
+
+describe('find_executions', () => {
+  it('calls rangeQuery with symbol and limit', async () => {
+    const mockBackend = {
+      rangeQuery: vi.fn().mockResolvedValue(fakePmlRows),
+      simpleQuery: vi.fn(),
+      setFocus: vi.fn(),
+      getStatus: vi.fn(),
+      close: vi.fn(),
+    };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+      storeQueryResults: vi.fn(),
+    });
+    const result = await handleToolCall(daemon, 'c1', 'find_executions', { symbol: 'nsDocShell::LoadURI' });
+    expect(mockBackend.rangeQuery).toHaveBeenCalledWith('execution', { symbol: 'nsDocShell::LoadURI' }, 50);
+    expect(daemon.storeQueryResults).toHaveBeenCalledWith('c1', fakePmlRows);
+    expect(result.content[0].text).toContain('nsDocShell::LoadURI');
+    expect(result.content[0].text).toContain('[1]');
+  });
+
+  it('includes print_exprs in params when provided', async () => {
+    const mockBackend = { rangeQuery: vi.fn().mockResolvedValue([]), simpleQuery: vi.fn(), setFocus: vi.fn(), getStatus: vi.fn(), close: vi.fn() };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+      storeQueryResults: vi.fn(),
+    });
+    await handleToolCall(daemon, 'c1', 'find_executions', { symbol: 'Foo::Bar', print_exprs: 'this->mX; this->mY' });
+    expect(mockBackend.rangeQuery).toHaveBeenCalledWith('execution', { symbol: 'Foo::Bar', print: 'this->mX; this->mY' }, 50);
+  });
+
+  it('respects custom limit', async () => {
+    const mockBackend = { rangeQuery: vi.fn().mockResolvedValue([]), simpleQuery: vi.fn(), setFocus: vi.fn(), getStatus: vi.fn(), close: vi.fn() };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+      storeQueryResults: vi.fn(),
+    });
+    await handleToolCall(daemon, 'c1', 'find_executions', { symbol: 'Foo', limit: 10 });
+    expect(mockBackend.rangeQuery).toHaveBeenCalledWith('execution', { symbol: 'Foo' }, 10);
+  });
+
+  it('returns error when not connected', async () => {
+    const daemon = mockDaemon({ getClientTraceId: vi.fn().mockReturnValue(null) });
+    const result = await handleToolCall(daemon, 'c1', 'find_executions', { symbol: 'Foo' });
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe('stack', () => {
+  it('calls simpleQuery with stack and empty mixArgs', async () => {
+    const mockBackend = { rangeQuery: vi.fn(), simpleQuery: vi.fn().mockResolvedValue(fakePmlRows), setFocus: vi.fn(), getStatus: vi.fn(), close: vi.fn() };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+      storeQueryResults: vi.fn(),
+    });
+    const result = await handleToolCall(daemon, 'c1', 'stack', {});
+    expect(mockBackend.simpleQuery).toHaveBeenCalledWith('stack', {});
+    expect(daemon.storeQueryResults).toHaveBeenCalledWith('c1', fakePmlRows);
+    expect(result.content[0].text).toContain('[1]');
+  });
+});
+
+describe('evaluate', () => {
+  it('calls simpleQuery with evaluate and payload mixArgs', async () => {
+    const mockBackend = { rangeQuery: vi.fn(), simpleQuery: vi.fn().mockResolvedValue([{ t: 'inline', c: ['42'] }]), setFocus: vi.fn(), getStatus: vi.fn(), close: vi.fn() };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+    });
+    await handleToolCall(daemon, 'c1', 'evaluate', { expression: 'this->mCount' });
+    expect(mockBackend.simpleQuery).toHaveBeenCalledWith('evaluate', { payload: { expression: 'this->mCount' } });
+  });
+});
+
+describe('goto', () => {
+  it('navigates to indexed result using stored focus', async () => {
+    const mockBackend = { rangeQuery: vi.fn(), simpleQuery: vi.fn(), setFocus: vi.fn().mockResolvedValue(undefined), getStatus: vi.fn(), close: vi.fn() };
+    const storedFocus = { moment: { event: 200, instr: 10 } };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+      getQueryFocus: vi.fn().mockReturnValue(storedFocus),
+    });
+    const result = await handleToolCall(daemon, 'c1', 'goto', { index: 1 });
+    expect(daemon.getQueryFocus).toHaveBeenCalledWith('c1', 1);
+    expect(mockBackend.setFocus).toHaveBeenCalledWith(storedFocus);
+    expect(result.isError).toBeUndefined();
+  });
+
+  it('returns error when index has no stored result', async () => {
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue({ setFocus: vi.fn(), rangeQuery: vi.fn(), simpleQuery: vi.fn(), getStatus: vi.fn(), close: vi.fn() }),
+      getQueryFocus: vi.fn().mockReturnValue(null),
+    });
+    const result = await handleToolCall(daemon, 'c1', 'goto', { index: 99 });
+    expect(result.isError).toBe(true);
+  });
+
+  it('navigates using raw focus object', async () => {
+    const mockBackend = { rangeQuery: vi.fn(), simpleQuery: vi.fn(), setFocus: vi.fn().mockResolvedValue(undefined), getStatus: vi.fn(), close: vi.fn() };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+    });
+    const focus = { moment: { event: 500, instr: 0 } };
+    await handleToolCall(daemon, 'c1', 'goto', { focus });
+    expect(mockBackend.setFocus).toHaveBeenCalledWith(focus);
+  });
+});
+
+describe('task_tree', () => {
+  it('calls simpleQuery with task-tree', async () => {
+    const mockBackend = { rangeQuery: vi.fn(), simpleQuery: vi.fn().mockResolvedValue([]), setFocus: vi.fn(), getStatus: vi.fn(), close: vi.fn() };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+    });
+    await handleToolCall(daemon, 'c1', 'task_tree', {});
+    expect(mockBackend.simpleQuery).toHaveBeenCalledWith('task-tree', {});
+  });
+});
+
+describe('search', () => {
+  it('calls simpleQuery with search and input mixArgs', async () => {
+    const mockBackend = { rangeQuery: vi.fn(), simpleQuery: vi.fn().mockResolvedValue([]), setFocus: vi.fn(), getStatus: vi.fn(), close: vi.fn() };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+      storeQueryResults: vi.fn(),
+    });
+    await handleToolCall(daemon, 'c1', 'search', { query: 'LoadURI', max_results: 10 });
+    expect(mockBackend.simpleQuery).toHaveBeenCalledWith('search', { input: 'LoadURI', maxResults: 10 });
+  });
+
+  it('uses default max_results of 20', async () => {
+    const mockBackend = { rangeQuery: vi.fn(), simpleQuery: vi.fn().mockResolvedValue([]), setFocus: vi.fn(), getStatus: vi.fn(), close: vi.fn() };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+      storeQueryResults: vi.fn(),
+    });
+    await handleToolCall(daemon, 'c1', 'search', { query: 'Foo' });
+    expect(mockBackend.simpleQuery).toHaveBeenCalledWith('search', { input: 'Foo', maxResults: 20 });
   });
 });
