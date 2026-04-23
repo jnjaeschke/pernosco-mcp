@@ -50,8 +50,8 @@ class ExtensionBackend implements PernoscoBackend {
   }
 
   private query<T>(type: string, payload: Record<string, unknown>): Promise<T> {
-    // Embed traceId in replyId so daemon can route replies without private field access
-    const replyId = `${this.traceId}-r${this.counter++}`;
+    // Embed traceId in replyId (separator "::" can't appear in trace IDs)
+    const replyId = `${this.traceId}::r${this.counter++}`;
     return new Promise((resolve, reject) => {
       this.pending.set(replyId, { resolve: resolve as (v: unknown) => void, reject });
       this.sendToDaemon({ type, traceId: this.traceId, replyId, payload });
@@ -126,9 +126,14 @@ export class Daemon {
     return port;
   }
 
-  private handleHttp(_req: IncomingMessage, res: ServerResponse): void {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok' }));
+  private handleHttp(req: IncomingMessage, res: ServerResponse): void {
+    if (req.method === 'GET' && req.url === '/health') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok' }));
+    } else {
+      res.writeHead(404);
+      res.end();
+    }
   }
 
   private handleConnection(ws: WebSocket): void {
@@ -211,8 +216,8 @@ export class Daemon {
       case 'reply': {
         const replyId = String(msg.replyId ?? '');
         if (replyId === 'startup') return;
-        // replyId format: "{traceId}-r{N}" — extract traceId from prefix
-        const sep = replyId.lastIndexOf('-r');
+        // replyId format: "{traceId}::r{N}" — extract traceId from prefix
+        const sep = replyId.indexOf('::r');
         if (sep !== -1) {
           const traceId = replyId.slice(0, sep);
           this.backends.get(traceId)?.handleReply(replyId, msg.payload);
