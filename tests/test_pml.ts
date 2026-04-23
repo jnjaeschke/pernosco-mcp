@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pmlToText, pmlRowsToText } from '../src/pml.js';
+import { pmlToText, pmlRowsToText, formatStdoutStderr, formatDynamicAnnotations } from '../src/pml.js';
 import type { PmlNode } from '../src/models.js';
 
 describe('pmlToText', () => {
@@ -82,5 +82,49 @@ describe('pmlRowsToText', () => {
     const rows = [{ t: 'inline', c: ['raw'] }];
     const text = pmlRowsToText(rows as unknown[]);
     expect(text).toContain('raw');
+  });
+});
+
+describe('formatStdoutStderr', () => {
+  it('shows event number and text content', () => {
+    const rows = [
+      { items: [{ focus: { moment: { event: 100, instr: 5 } }, pml: { t: 'inline', c: ['hello\n'] } }] },
+      { items: [{ focus: { moment: { event: 200, instr: 3 } }, pml: { t: 'inline', c: ['world\n'] } }] },
+    ];
+    const text = formatStdoutStderr(rows as unknown[]);
+    expect(text).toContain('[1] event=100');
+    expect(text).toContain('hello');
+    expect(text).toContain('[2] event=200');
+    expect(text).toContain('world');
+  });
+
+  it('handles empty rows', () => {
+    expect(formatStdoutStderr([])).toBe('No output found.');
+  });
+});
+
+describe('formatDynamicAnnotations', () => {
+  it('shows executed lines with counts', () => {
+    const rows = [
+      { lineNumber: 100, count: 1, strength: 'strong' },
+      { lineNumber: 101, count: 5, strength: 'strong' },
+      { lineNumber: 102, count: 0, strength: 'none' },
+    ];
+    const text = formatDynamicAnnotations(rows as unknown[]);
+    expect(text).toContain('100');
+    expect(text).toContain('101');
+    expect(text).toContain('5×');
+    expect(text).toContain('102');
+    expect(text).toContain('not executed');
+  });
+
+  it('handles empty rows', () => {
+    expect(formatDynamicAnnotations([])).toBe('No annotation data.');
+  });
+
+  it('falls back to pmlRowsToText for unknown structure', () => {
+    const rows = [{ t: 'inline', c: ['something'] }];
+    const text = formatDynamicAnnotations(rows as unknown[]);
+    expect(text).toBeTruthy();
   });
 });
