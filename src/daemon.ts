@@ -7,6 +7,7 @@ import type { JSONRPCMessage, MessageExtraInfo } from '@modelcontextprotocol/sdk
 import fs from 'fs/promises';
 import { CONFIG_DIR, SERVER_JSON } from './spawn.js';
 import { TOOL_DEFS, handleToolCall } from './tools.js';
+import { registerResources } from './resources.js';
 import { VERSION } from './version.js';
 import { PernoscoError, ConnectionError, SessionNotConnected, TraceNotFound, QueryTimeout, QueryError } from './errors.js';
 import type { PernoscoBackend } from './backend.js';
@@ -184,13 +185,14 @@ export class Daemon {
     const transport = new ShimTransport(ws, clientId);
     const server = new Server(
       { name: 'pernosco-mcp', version: VERSION },
-      { capabilities: { tools: {} } }
+      { capabilities: { tools: {}, resources: {} } }
     );
 
     server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_DEFS }));
     server.setRequestHandler(CallToolRequestSchema, async (req) => {
       return handleToolCall(this, clientId, req.params.name, (req.params.arguments ?? {}) as Record<string, unknown>);
     });
+    registerResources(server, this, clientId);
 
     const session: ClientSession = { ws, transport, server, traceId: null };
     this.clients.set(clientId, session);
