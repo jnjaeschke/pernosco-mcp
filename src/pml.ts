@@ -90,6 +90,24 @@ export function pmlRowsToText(rows: PmlRow[]): string {
     .join('\n');
 }
 
+export function formatStack(rows: PmlRow[]): string {
+  if (rows.length === 0) return 'No stack frames.';
+  return rows
+    .map((row, i) => {
+      const itemsRow = asItemsRow(row);
+      let pml: PmlNode | null = null;
+      if (itemsRow) {
+        pml = itemsRow.items[0]?.pml ?? null;
+      } else {
+        pml = asPmlNode(row);
+      }
+      const text = pml ? pmlToText(pml).trim() : JSON.stringify(row);
+      const src = pml ? extractSourceSuffix(pml) : '';
+      return `#${i} ${text}${src}`;
+    })
+    .join('\n');
+}
+
 function extractMoment(row: unknown): { event: number; instr: number } | null {
   const itemsRow = asItemsRow(row);
   return itemsRow?.items[0]?.focus?.moment ?? null;

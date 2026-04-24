@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pmlToText, pmlRowsToText, formatStdoutStderr, formatDynamicAnnotations, asItemsRow, asPmlNode } from '../src/pml.js';
+import { pmlToText, pmlRowsToText, formatStdoutStderr, formatDynamicAnnotations, asItemsRow, asPmlNode, formatStack } from '../src/pml.js';
 import type { PmlNode } from '../src/models.js';
 
 describe('pmlToText', () => {
@@ -181,5 +181,30 @@ describe('type guards', () => {
     expect(asPmlNode({ pml: { t: 'block', c: [] } })?.t).toBe('block');
     expect(asPmlNode(null)).toBeNull();
     expect(asPmlNode({ random: 'object' })).toBeNull();
+  });
+});
+
+describe('formatStack', () => {
+  it('formats stack frames with # prefix and source', () => {
+    const rows = [
+      { items: [{ focus: { moment: { event: 100, instr: 5 } }, pml: {
+        t: 'block', a: { source: { url: 'https://hg.mozilla.org/nsDocShell.cpp', pos: { line: 4521 } } },
+        c: [{ t: 'inline', c: ['nsDocShell::LoadURI(aURI)'] }]
+      } }] },
+      { items: [{ focus: { moment: { event: 100, instr: 3 } }, pml: {
+        t: 'block', a: { source: { url: 'https://hg.mozilla.org/nsThread.cpp', pos: { line: 1234 } } },
+        c: [{ t: 'inline', c: ['nsThread::ProcessNextEvent()'] }]
+      } }] },
+    ];
+    const text = formatStack(rows as unknown[]);
+    expect(text).toContain('#0');
+    expect(text).toContain('#1');
+    expect(text).toContain('nsDocShell.cpp:4521');
+    expect(text).toContain('nsThread.cpp:1234');
+    expect(text).not.toContain('[1]');
+  });
+
+  it('handles empty stack', () => {
+    expect(formatStack([])).toBe('No stack frames.');
   });
 });

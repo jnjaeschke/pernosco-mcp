@@ -1,5 +1,5 @@
 import type { Daemon } from './daemon.js';
-import { pmlRowsToText, formatStdoutStderr, formatDynamicAnnotations } from './pml.js';
+import { pmlRowsToText, formatStdoutStderr, formatDynamicAnnotations, formatStack } from './pml.js';
 import type { Focus } from './models.js';
 
 export const TOOL_DEFS = [
@@ -251,7 +251,7 @@ async function stackTool(daemon: Daemon, clientId: string): Promise<ToolResult> 
   const backend = daemon.getBackend(clientId);
   const rows = await backend.simpleQuery('stack', {});
   daemon.storeQueryResults(clientId, rows);
-  return ok(pmlRowsToText(rows));
+  return ok(formatStack(rows));
 }
 
 async function evaluateTool(daemon: Daemon, clientId: string, args: Record<string, unknown>): Promise<ToolResult> {

@@ -193,7 +193,8 @@ describe('stack', () => {
     const result = await handleToolCall(daemon, 'c1', 'stack', {});
     expect(mockBackend.simpleQuery).toHaveBeenCalledWith('stack', {});
     expect(daemon.storeQueryResults).toHaveBeenCalledWith('c1', fakePmlRows);
-    expect(result.content[0].text).toContain('[1]');
+    expect(result.content[0].text).toContain('#0');
+    expect(result.content[0].text).not.toContain('[1]');
   });
 });
 
