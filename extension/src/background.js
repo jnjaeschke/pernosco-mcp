@@ -82,10 +82,11 @@ function handleDaemonMessage(msg) {
 
     case 'setFocus': {
       const entry = findTabByTraceId(msg.traceId);
-      if (entry) {
-        const msgId = `msg${nextMsgId++}`;
-        entry.port.postMessage({ type: 'focus', msgId, payload: msg.payload });
-      }
+      if (!entry) return;
+      const localReplyId = `reply${nextMsgId++}`;
+      const msgId = `msg${nextMsgId++}`;
+      entry.pendingReplies.set(localReplyId, msg.replyId);
+      entry.port.postMessage({ type: 'focus', msgId, replyId: localReplyId, payload: msg.payload });
       return;
     }
 

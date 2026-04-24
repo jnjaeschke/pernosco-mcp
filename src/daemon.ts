@@ -8,7 +8,7 @@ import fs from 'fs/promises';
 import { CONFIG_DIR, SERVER_JSON } from './spawn.js';
 import { TOOL_DEFS, handleToolCall } from './tools.js';
 import { VERSION } from './version.js';
-import { ConnectionError, SessionNotConnected, TraceNotFound, QueryTimeout } from './errors.js';
+import { ConnectionError, SessionNotConnected, TraceNotFound, QueryTimeout, QueryError } from './errors.js';
 import type { PernoscoBackend } from './backend.js';
 import type { Focus, PmlRow, SessionStatus } from './models.js';
 import { asItemsRow } from './pml.js';
@@ -81,6 +81,14 @@ class ExtensionBackend implements PernoscoBackend {
     }
   }
 
+  handleError(replyId: string, error: Error): void {
+    const p = this.pending.get(replyId);
+    if (p) {
+      this.pending.delete(replyId);
+      p.reject(error);
+    }
+  }
+
   rejectAll(error: Error): void {
     for (const { reject } of this.pending.values()) reject(error);
     this.pending.clear();
@@ -95,7 +103,7 @@ class ExtensionBackend implements PernoscoBackend {
   }
 
   async setFocus(focus: Focus): Promise<void> {
-    this.sendToDaemon({ type: 'setFocus', traceId: this.traceId, payload: { focus } });
+    await this.query<{ ok: boolean }>('setFocus', { focus });
   }
 
   async getStatus(): Promise<SessionStatus> {
@@ -253,7 +261,15 @@ export class Daemon {
         const sep = replyId.indexOf('::r');
         if (sep !== -1) {
           const traceId = replyId.slice(0, sep);
-          this.backends.get(traceId)?.handleReply(replyId, msg.payload);
+          const backend = this.backends.get(traceId);
+          if (backend) {
+            const extra = msg.extra as Record<string, unknown> | undefined;
+            if (extra?.error) {
+              backend.handleError(replyId, new QueryError(String(extra.error)));
+            } else {
+              backend.handleReply(replyId, msg.payload);
+            }
+          }
         }
         break;
       }

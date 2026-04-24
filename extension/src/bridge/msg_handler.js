@@ -151,14 +151,18 @@ export class MessageHandler {
         result = this[lookupName](msg.payload, replyFunc, msg);
       } catch (ex) {
         console.error('Error processing message', msg, ex);
+        if (replyFunc) {
+          replyFunc(null, { error: String(ex) });
+        }
+        return;
       }
 
-      // We don't care about the error right now, but if the thing was an
-      // async function, we do want to add a catch handler to report an async
-      // failure.
       if (result && result.then) {
         result.catch((ex) => {
           console.error('Async error processing message', msg, ex);
+          if (replyFunc) {
+            replyFunc(null, { error: String(ex) });
+          }
         });
       }
     }

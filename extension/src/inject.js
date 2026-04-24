@@ -348,11 +348,12 @@ class ContentScriptServer extends BridgeServer {
     this.sendMessage('statusReport', this.generateStatusReportPayload(options));
   }
 
-  onMsg_focus({ focus, source }) {
+  onMsg_focus({ focus, source }, reply) {
     console.log('Setting focus to', focus);
     this.pclient.willSetFocus(this.wrappedBridgeHelperView);
     // TODO: Allow propagating the annotation.
     this.pclient.setFocus(cloneData(focus), cloneData(source), this.wrappedBridgeHelperView, cloneData({}));
+    if (reply) reply({ ok: true });
   }
 
   /**
