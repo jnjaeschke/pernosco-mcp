@@ -13,6 +13,14 @@ describe('Daemon.cleanupClient', () => {
   });
 });
 
+describe('Daemon.bindClient', () => {
+  it('rejects traceId containing ::r separator', async () => {
+    const { Daemon } = await import('../src/daemon.js');
+    const daemon = new Daemon();
+    expect(() => daemon.bindClient('c1', 'bad::rtraceId')).toThrow('reserved separator');
+  });
+});
+
 describe('withTimeout', () => {
   it('rejects after timeout', async () => {
     const { withTimeout } = await import('../src/daemon.js');

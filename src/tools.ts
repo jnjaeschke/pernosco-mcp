@@ -230,6 +230,7 @@ async function sessionStatus(daemon: Daemon, clientId: string): Promise<ToolResu
 function sessionDisconnect(daemon: Daemon, clientId: string): ToolResult {
   const traceId = daemon.getClientTraceId(clientId);
   daemon.unbindClient(clientId);
+  daemon.cleanupClient(clientId);
   return ok(traceId ? `Disconnected from trace ${traceId}` : 'Not connected.');
 }
 

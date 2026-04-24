@@ -9,5 +9,5 @@ try {
 
 writeFileSync(
   new URL('../src/version.ts', import.meta.url),
-  `export const VERSION = '${version}';\n`
+  `export const VERSION = ${JSON.stringify(version)};\n`
 );
