@@ -15,9 +15,6 @@
   "background": {
     "scripts": ["background.js"]
   },
-  "browser_action": {
-    "default_title": "pernosco-mcp"
-  },
   "applications": {
     "gecko": {
       "id": "pernosco-mcp@mozilla.org"

@@ -377,7 +377,7 @@ class ContentScriptServer extends BridgeServer {
     try {
       const req = await buildSimpleQuery(this.pclient, mixArgs);
       const handler = new BatchHandler();
-      queryId = this.pclient.openQuery(name, cloneData(req), wrapActiveInto(handler));
+      queryId = this._openQuery(name, cloneData(req), wrapActiveInto(handler));
       const results = await handler.promise;
       queryId = null;
 
