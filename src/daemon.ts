@@ -8,12 +8,21 @@ import fs from 'fs/promises';
 import { CONFIG_DIR, SERVER_JSON } from './spawn.js';
 import { TOOL_DEFS, handleToolCall } from './tools.js';
 import { VERSION } from './version.js';
-import { ConnectionError, SessionNotConnected, TraceNotFound } from './errors.js';
+import { ConnectionError, SessionNotConnected, TraceNotFound, QueryTimeout } from './errors.js';
 import type { PernoscoBackend } from './backend.js';
 import type { Focus, PmlRow, SessionStatus } from './models.js';
 import { asItemsRow } from './pml.js';
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
+const QUERY_TIMEOUT_MS = 30_000;
+
+export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new QueryTimeout(label, ms)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 // ─── ShimTransport ─────────────────────────────────────────────────────────
 
@@ -54,9 +63,13 @@ class ExtensionBackend implements PernoscoBackend {
   private query<T>(type: string, payload: Record<string, unknown>): Promise<T> {
     // Embed traceId in replyId (separator "::" can't appear in trace IDs)
     const replyId = `${this.traceId}::r${this.counter++}`;
-    return new Promise((resolve, reject) => {
+    const inner = new Promise<T>((resolve, reject) => {
       this.pending.set(replyId, { resolve: resolve as (v: unknown) => void, reject });
-      this.sendToDaemon({ type, traceId: this.traceId, replyId, payload });
+    });
+    this.sendToDaemon({ type, traceId: this.traceId, replyId, payload });
+    return withTimeout(inner, QUERY_TIMEOUT_MS, type).catch(err => {
+      this.pending.delete(replyId);
+      throw err;
     });
   }
 

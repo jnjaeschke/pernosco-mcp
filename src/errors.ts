@@ -26,3 +26,9 @@ export class TabNotFound extends PernoscoError {
     super(`No open Pernosco tab for trace ${traceId}. Open the URL in Firefox first.`);
   }
 }
+
+export class QueryTimeout extends PernoscoError {
+  constructor(type: string, timeoutMs: number) {
+    super(`Query '${type}' timed out after ${timeoutMs}ms`);
+  }
+}
