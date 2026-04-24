@@ -24,8 +24,16 @@ export interface PmlNode {
   c?: Array<PmlNode | string>;
 }
 
-// A single result row from a Pernosco query — opaque object from the extension
-export type PmlRow = unknown;
+export interface PmlItemRow {
+  items: Array<{
+    focus: Focus;
+    pml?: PmlNode;
+    [key: string]: unknown;
+  }>;
+}
+
+// A single result row from a Pernosco query
+export type PmlRow = PmlItemRow | PmlNode | Record<string, unknown>;
 
 export interface SessionStatus {
   focus: Focus;

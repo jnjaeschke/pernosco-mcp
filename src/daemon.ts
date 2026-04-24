@@ -11,6 +11,7 @@ import { VERSION } from './version.js';
 import { ConnectionError, SessionNotConnected, TraceNotFound } from './errors.js';
 import type { PernoscoBackend } from './backend.js';
 import type { Focus, PmlRow, SessionStatus } from './models.js';
+import { asItemsRow } from './pml.js';
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -301,10 +302,8 @@ export class Daemon {
     if (!rows) return null;
     const row = rows[index - 1];
     if (row == null) return null;
-    const r = row as Record<string, unknown>;
-    // PML rows have structure { items: [{ focus, pml }] } per mozsearch-bridge protocol
-    const items = r?.items as Array<Record<string, unknown>> | undefined;
-    return (items?.[0]?.focus as Focus | undefined) ?? null;
+    const itemsRow = asItemsRow(row);
+    return itemsRow?.items[0]?.focus ?? null;
   }
 
   hasTab(traceId: string): boolean {

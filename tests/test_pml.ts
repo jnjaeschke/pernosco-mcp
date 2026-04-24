@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pmlToText, pmlRowsToText, formatStdoutStderr, formatDynamicAnnotations } from '../src/pml.js';
+import { pmlToText, pmlRowsToText, formatStdoutStderr, formatDynamicAnnotations, asItemsRow, asPmlNode } from '../src/pml.js';
 import type { PmlNode } from '../src/models.js';
 
 describe('pmlToText', () => {
@@ -126,5 +126,27 @@ describe('formatDynamicAnnotations', () => {
     const rows = [{ t: 'inline', c: ['something'] }];
     const text = formatDynamicAnnotations(rows as unknown[]);
     expect(text).toBeTruthy();
+  });
+});
+
+describe('type guards', () => {
+  it('asItemsRow extracts from items-wrapped row', () => {
+    const row = { items: [{ focus: { moment: { event: 1, instr: 0 } }, pml: { t: 'inline', c: ['x'] } }] };
+    const result = asItemsRow(row);
+    expect(result).not.toBeNull();
+    expect(result!.items[0].focus.moment.event).toBe(1);
+  });
+
+  it('asItemsRow returns null for non-items row', () => {
+    expect(asItemsRow({ t: 'inline', c: ['x'] })).toBeNull();
+    expect(asItemsRow(null)).toBeNull();
+    expect(asItemsRow('string')).toBeNull();
+  });
+
+  it('asPmlNode extracts from raw PmlNode or {pml:...} wrapper', () => {
+    expect(asPmlNode({ t: 'inline', c: ['x'] })?.t).toBe('inline');
+    expect(asPmlNode({ pml: { t: 'block', c: [] } })?.t).toBe('block');
+    expect(asPmlNode(null)).toBeNull();
+    expect(asPmlNode({ random: 'object' })).toBeNull();
   });
 });

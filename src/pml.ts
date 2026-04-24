@@ -1,4 +1,4 @@
-import type { PmlNode, PmlRow } from './models.js';
+import type { PmlItemRow, PmlNode, PmlRow } from './models.js';
 
 export function pmlToText(node: PmlNode | string | null | undefined, depth = 0): string {
   if (node == null) return '';
@@ -35,12 +35,28 @@ export function pmlToText(node: PmlNode | string | null | undefined, depth = 0):
   }
 }
 
-function extractPml(row: unknown): PmlNode | null {
+export function asItemsRow(row: unknown): PmlItemRow | null {
   if (row == null || typeof row !== 'object') return null;
   const r = row as Record<string, unknown>;
-  if (r.pml && typeof r.pml === 'object') return r.pml as PmlNode;
-  if (r.t) return row as PmlNode;
+  if (!Array.isArray(r.items)) return null;
+  const first = (r.items as unknown[])[0];
+  if (first == null || typeof first !== 'object') return null;
+  if (!('focus' in (first as Record<string, unknown>))) return null;
+  return row as PmlItemRow;
+}
+
+export function asPmlNode(row: unknown): PmlNode | null {
+  if (row == null || typeof row !== 'object') return null;
+  const r = row as Record<string, unknown>;
+  if (typeof r.t === 'string') return row as PmlNode;
+  if (r.pml && typeof r.pml === 'object' && typeof (r.pml as Record<string, unknown>).t === 'string') {
+    return r.pml as PmlNode;
+  }
   return null;
+}
+
+function extractPml(row: unknown): PmlNode | null {
+  return asPmlNode(row);
 }
 
 export function pmlRowsToText(rows: PmlRow[]): string {
@@ -55,19 +71,15 @@ export function pmlRowsToText(rows: PmlRow[]): string {
 }
 
 function extractMoment(row: unknown): { event: number; instr: number } | null {
-  const r = row as Record<string, unknown>;
-  const items = r?.items as Array<Record<string, unknown>> | undefined;
-  const focus = items?.[0]?.focus as Record<string, unknown> | undefined;
-  const moment = focus?.moment as { event: number; instr: number } | undefined;
-  return moment ?? null;
+  const itemsRow = asItemsRow(row);
+  return itemsRow?.items[0]?.focus?.moment ?? null;
 }
 
 function extractPmlFromStdoutRow(row: unknown): PmlNode | null {
-  const pml = extractPml(row);
-  if (pml) return pml;
-  const r = row as Record<string, unknown>;
-  const items = r?.items as Array<Record<string, unknown>> | undefined;
-  if (items?.[0]) return extractPml(items[0]);
+  const direct = asPmlNode(row);
+  if (direct) return direct;
+  const itemsRow = asItemsRow(row);
+  if (itemsRow) return asPmlNode(itemsRow.items[0]);
   return null;
 }
 
