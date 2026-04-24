@@ -3,3 +3,4 @@ dist/
 *.log
 package-lock.json
 src/version.ts
+pernosco-mcp.xpi
