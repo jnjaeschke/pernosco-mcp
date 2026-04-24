@@ -1,5 +1,17 @@
 #!/usr/bin/env node
-import { detectOrSpawn } from './dist/spawn.js';
+
+let detectOrSpawn;
+try {
+  ({ detectOrSpawn } = await import('./dist/spawn.js'));
+} catch {
+  const json = JSON.stringify({ error: 'pernosco-mcp not built. Run: npm run build' });
+  const buf = Buffer.from(json, 'utf8');
+  const header = Buffer.alloc(4);
+  header.writeUInt32LE(buf.length, 0);
+  process.stdout.write(header);
+  process.stdout.write(buf);
+  process.exit(1);
+}
 
 function readNativeMessage(stream) {
   return new Promise((resolve, reject) => {

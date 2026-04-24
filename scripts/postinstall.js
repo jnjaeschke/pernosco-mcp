@@ -14,7 +14,7 @@ function getManifestDir() {
   } else if (process.platform === 'darwin') {
     return path.join(os.homedir(), 'Library', 'Application Support', 'Mozilla', 'NativeMessagingHosts');
   }
-  throw new Error(`Unsupported platform: ${process.platform}`);
+  return null;
 }
 
 if (process.argv.includes('--build-only')) {
@@ -23,6 +23,10 @@ if (process.argv.includes('--build-only')) {
 
 try {
   const manifestDir = getManifestDir();
+  if (!manifestDir) {
+    console.warn('pernosco-mcp: native messaging host registration not supported on this platform (Linux and macOS only)');
+    process.exit(0);
+  }
   fs.mkdirSync(manifestDir, { recursive: true });
 
   const template = JSON.parse(fs.readFileSync(path.join(pkgRoot, 'native-host.json'), 'utf8'));

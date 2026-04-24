@@ -324,17 +324,20 @@ async function notebookRead(daemon: Daemon, clientId: string): Promise<ToolResul
   const entries = Object.entries(data as Record<string, unknown>)
     .filter(([key]) => key.startsWith('notebook/'))
     .map(([, value]) => {
+      if (value == null || typeof value !== 'object') return null;
       const v = value as Record<string, unknown>;
       const created = v?.create as Record<string, unknown> | undefined;
       const item = created?.value as Record<string, unknown> | undefined;
+      if (!item) return null;
       const focus = item?.focus as Record<string, unknown> | undefined;
       const moment = focus?.moment as { event: number; instr: number } | undefined;
       const text = typeof item?.text === 'string' ? item.text : null;
       const parts: string[] = [];
       if (moment) parts.push(`event=${moment.event}`);
       if (text) parts.push(`"${text}"`);
-      return parts.join('  ') || JSON.stringify(value);
-    });
+      return parts.length > 0 ? parts.join('  ') : null;
+    })
+    .filter((e): e is string => e !== null);
   if (entries.length === 0) return ok('No notebook entries found.');
   return ok(`Notebook entries:\n${entries.map((e, i) => `[${i + 1}] ${e}`).join('\n')}`);
 }
@@ -361,6 +364,7 @@ async function dynamicAnnotations(daemon: Daemon, clientId: string, args: Record
   }
   if (!sourceUrl) return err('No source URL available. Navigate to a source location first (use stack or goto), or provide source_url explicitly.');
   const rows = await backend.simpleQuery('dynamicAnnotations', { source: sourceUrl });
+  daemon.storeQueryResults(clientId, rows);
   const file = sourceUrl.split('/').pop() ?? sourceUrl;
   return ok(`Dynamic annotations for ${file}:\n\n${formatDynamicAnnotations(rows)}`);
 }

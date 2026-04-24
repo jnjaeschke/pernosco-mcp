@@ -8,7 +8,7 @@ import fs from 'fs/promises';
 import { CONFIG_DIR, SERVER_JSON } from './spawn.js';
 import { TOOL_DEFS, handleToolCall } from './tools.js';
 import { VERSION } from './version.js';
-import { ConnectionError, SessionNotConnected, TraceNotFound, QueryTimeout, QueryError } from './errors.js';
+import { PernoscoError, ConnectionError, SessionNotConnected, TraceNotFound, QueryTimeout, QueryError } from './errors.js';
 import type { PernoscoBackend } from './backend.js';
 import type { Focus, PmlRow, SessionStatus } from './models.js';
 import { asItemsRow } from './pml.js';
@@ -305,6 +305,9 @@ export class Daemon {
   }
 
   bindClient(clientId: string, traceId: string): void {
+    if (traceId.includes('::r')) {
+      throw new PernoscoError(`Invalid trace ID (contains reserved separator '::r'): ${traceId}`);
+    }
     const session = this.clients.get(clientId);
     if (session) session.traceId = traceId;
   }

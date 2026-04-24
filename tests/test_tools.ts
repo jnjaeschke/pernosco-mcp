@@ -361,6 +361,25 @@ describe('notebook_read', () => {
   });
 });
 
+describe('notebook_read edge cases', () => {
+  it('handles entries with missing focus gracefully', async () => {
+    const storageData = {
+      'notebook/123': { create: { value: { text: 'no focus here' } } },
+      'notebook/456': { create: { value: { focus: { moment: { event: 10, instr: 0 } } } } },
+      'notebook/789': 'completely wrong type',
+    };
+    const mockBackend = { rangeQuery: vi.fn(), simpleQuery: vi.fn(), setFocus: vi.fn(), getStatus: vi.fn(), close: vi.fn(), notebookRead: vi.fn().mockResolvedValue(storageData) };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+    });
+    const result = await handleToolCall(daemon, 'c1', 'notebook_read', {});
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].text).toContain('no focus here');
+    expect(result.content[0].text).toContain('event=10');
+  });
+});
+
 describe('find_breakpoint_hits', () => {
   it('calls rangeQuery breakpoint with file and line', async () => {
     const mockBackend = { rangeQuery: vi.fn().mockResolvedValue([]), simpleQuery: vi.fn(), setFocus: vi.fn(), getStatus: vi.fn(), close: vi.fn(), notebookRead: vi.fn() };
