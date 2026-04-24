@@ -209,6 +209,7 @@ export class Daemon {
 
     ws.on('close', () => {
       this.clients.delete(clientId);
+      this.lastResults.delete(clientId);
       transport.onclose?.();
       this.resetIdleTimer();
     });
@@ -343,11 +344,33 @@ export class Daemon {
     this.sendToExtension({ type: 'openTab', url });
   }
 
+  cleanupClient(clientId: string): void {
+    this.lastResults.delete(clientId);
+  }
+
+  async shutdown(): Promise<void> {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+
+    for (const [, session] of this.clients) {
+      session.ws.close(1001, 'Daemon shutting down');
+    }
+
+    if (this.extensionWs) {
+      this.extensionWs.close(1001, 'Daemon shutting down');
+    }
+
+    this.wss.close();
+
+    try { await fs.unlink(SERVER_JSON); } catch {}
+  }
+
   private resetIdleTimer(): void {
     if (this.idleTimer) clearTimeout(this.idleTimer);
     const totalConnections = this.clients.size + (this.extensionWs ? 1 : 0);
     if (totalConnections === 0) {
-      this.idleTimer = setTimeout(() => process.exit(0), IDLE_TIMEOUT_MS);
+      this.idleTimer = setTimeout(() => {
+        this.shutdown().finally(() => process.exit(0));
+      }, IDLE_TIMEOUT_MS);
     }
   }
 }
@@ -362,4 +385,10 @@ if (process.argv[1]?.endsWith('daemon.js')) {
     console.error('Daemon start failed:', e);
     process.exit(1);
   });
+
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.on(signal, () => {
+      daemon.shutdown().finally(() => process.exit(0));
+    });
+  }
 }

@@ -42,7 +42,7 @@ async function readServerJson(): Promise<ServerInfo | null> {
 async function spawnDaemon(): Promise<void> {
   const daemonScript = fileURLToPath(new URL('./daemon.js', import.meta.url));
   const logPath = path.join(CONFIG_DIR, 'daemon.log');
-  const logStream = createWriteStream(logPath, { flags: 'a' });
+  const logStream = createWriteStream(logPath, { flags: 'w' });
   const child = spawn(process.execPath, [daemonScript], {
     detached: true,
     stdio: ['ignore', logStream, logStream],

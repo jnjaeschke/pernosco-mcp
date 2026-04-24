@@ -1,5 +1,18 @@
 import { describe, it, expect, vi } from 'vitest';
 
+describe('Daemon.cleanupClient', () => {
+  it('removes lastResults for client', async () => {
+    const { Daemon } = await import('../src/daemon.js');
+    const daemon = new Daemon();
+
+    daemon.storeQueryResults('client1', [{ items: [{ focus: { moment: { event: 1, instr: 0 } } }] }]);
+    expect(daemon.getQueryFocus('client1', 1)).not.toBeNull();
+
+    daemon.cleanupClient('client1');
+    expect(daemon.getQueryFocus('client1', 1)).toBeNull();
+  });
+});
+
 describe('withTimeout', () => {
   it('rejects after timeout', async () => {
     const { withTimeout } = await import('../src/daemon.js');
