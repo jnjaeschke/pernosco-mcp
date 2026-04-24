@@ -4,10 +4,11 @@ import fs from 'fs/promises';
 import { createWriteStream } from 'fs';
 import path from 'path';
 import http from 'http';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import type { ServerInfo } from './models.js';
 
-export const CONFIG_DIR = path.join(process.env.HOME ?? '/tmp', '.pernosco-mcp');
+export const CONFIG_DIR = path.join(os.homedir(), '.pernosco-mcp');
 export const SERVER_JSON = path.join(CONFIG_DIR, 'server.json');
 const LOCK_FILE = path.join(CONFIG_DIR, 'spawn.lock');
 const HEALTH_TIMEOUT_MS = 2000;
