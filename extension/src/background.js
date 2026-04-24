@@ -150,6 +150,7 @@ function connectToTab(tabId, traceId, attempt = 0) {
     if (!tabs.has(tabId)) return;
     tabs.delete(tabId);
     entry.pendingReplies.clear();
+    sendToDaemon({ type: 'tabClosed', traceId });
     if (attempt < 5) {
       setTimeout(() => {
         browser.tabs.get(tabId).then(tab => {
@@ -159,8 +160,6 @@ function connectToTab(tabId, traceId, attempt = 0) {
           }
         }).catch(() => {});
       }, 2000);
-    } else {
-      sendToDaemon({ type: 'tabClosed', traceId });
     }
   });
 
