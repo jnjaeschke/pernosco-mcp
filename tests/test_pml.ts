@@ -85,6 +85,39 @@ describe('pmlRowsToText', () => {
   });
 });
 
+describe('pmlRowsToText with PmlItemRow', () => {
+  it('extracts pml from items wrapper', () => {
+    const rows = [
+      { items: [{ focus: { moment: { event: 200, instr: 10 } }, pml: { t: 'inline', c: ['nsDocShell::LoadURI(...)'] } }] },
+      { items: [{ focus: { moment: { event: 300, instr: 20 } }, pml: { t: 'inline', c: ['nsDocShell::LoadURI(...)'] } }] },
+    ];
+    const text = pmlRowsToText(rows as unknown[]);
+    expect(text).toContain('[1]');
+    expect(text).toContain('nsDocShell::LoadURI');
+    expect(text).toContain('e=200');
+    expect(text).not.toContain('"items"');
+  });
+
+  it('shows source location from pml attributes', () => {
+    const rows = [
+      { items: [{ focus: { moment: { event: 100, instr: 5 } }, pml: {
+        t: 'block', a: { source: { url: 'https://hg.mozilla.org/nsDocShell.cpp', pos: { line: 4521 } } },
+        c: [{ t: 'inline', c: ['nsDocShell::LoadURI(aURI)'] }]
+      } }] },
+    ];
+    const text = pmlRowsToText(rows as unknown[]);
+    expect(text).toContain('nsDocShell.cpp:4521');
+    expect(text).toContain('e=100');
+  });
+
+  it('handles rows without focus gracefully', () => {
+    const rows = [{ pml: { t: 'inline', c: ['hello'] } }];
+    const text = pmlRowsToText(rows as unknown[]);
+    expect(text).toContain('hello');
+    expect(text).not.toContain('undefined');
+  });
+});
+
 describe('formatStdoutStderr', () => {
   it('shows event number and text content', () => {
     const rows = [

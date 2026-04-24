@@ -55,19 +55,39 @@ export function asPmlNode(row: unknown): PmlNode | null {
   return null;
 }
 
-function extractPml(row: unknown): PmlNode | null {
-  return asPmlNode(row);
+function extractSourceSuffix(node: PmlNode | null): string {
+  if (!node?.a?.source) return '';
+  const source = node.a.source;
+  if (typeof source !== 'object' || !('url' in source)) return '';
+  const url = source.url as string;
+  const file = url.split('/').pop() ?? url;
+  const pos = source.pos as Record<string, number> | undefined;
+  const line = pos?.line;
+  return line != null ? ` | ${file}:${line}` : ` | ${file}`;
 }
 
 export function pmlRowsToText(rows: PmlRow[]): string {
   if (rows.length === 0) return 'No results.';
   return rows
     .map((row, i) => {
-      const pml = extractPml(row);
-      const text = pml ? pmlToText(pml) : JSON.stringify(row);
-      return `[${i + 1}] ${text.trim()}`;
+      const itemsRow = asItemsRow(row);
+      let pml: PmlNode | null;
+      let focusSuffix = '';
+
+      if (itemsRow) {
+        const item = itemsRow.items[0];
+        pml = item?.pml ?? null;
+        const m = item?.focus?.moment;
+        if (m) focusSuffix = ` | e=${m.event},i=${m.instr}`;
+      } else {
+        pml = asPmlNode(row);
+      }
+
+      const text = pml ? pmlToText(pml).trim() : JSON.stringify(row);
+      const src = pml ? extractSourceSuffix(pml) : '';
+      return `[${i + 1}] ${text}${src}${focusSuffix}`;
     })
-    .join('\n\n');
+    .join('\n');
 }
 
 function extractMoment(row: unknown): { event: number; instr: number } | null {
