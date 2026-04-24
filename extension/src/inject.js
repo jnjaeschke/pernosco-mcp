@@ -433,8 +433,22 @@ class ContentScriptServer extends BridgeServer {
   }
 }
 
-try {
-  globalThis.server = new ContentScriptServer();
-} catch (ex) {
-  console.error(ex);
+async function init() {
+  const maxWait = 15000;
+  const start = Date.now();
+  while (!window.wrappedJSObject?.client) {
+    if (Date.now() - start > maxWait) {
+      console.error('pernosco-mcp: window.client not available after 15s');
+      return;
+    }
+    await new Promise(r => setTimeout(r, 250));
+  }
+
+  try {
+    globalThis.server = new ContentScriptServer();
+  } catch (ex) {
+    console.error('pernosco-mcp:', ex);
+  }
 }
+
+init();

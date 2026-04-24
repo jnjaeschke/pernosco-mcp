@@ -132,14 +132,13 @@ function findTabByTraceId(traceId) {
 
 // ─── Content script routing ───────────────────────────────────────────────────
 
-function connectToTab(tabId, traceId) {
+function connectToTab(tabId, traceId, attempt = 0) {
   const port = browser.tabs.connect(tabId, { name: 'pernosco-mcp' });
   const entry = { traceId, port, pendingReplies: new Map() };
   tabs.set(tabId, entry);
 
   port.onMessage.addListener(msg => {
     if (msg.type !== 'reply') return;
-    // msg.msgId holds the localReplyId we sent as replyId
     const daemonReplyId = entry.pendingReplies.get(msg.msgId);
     if (daemonReplyId !== undefined) {
       entry.pendingReplies.delete(msg.msgId);
@@ -148,10 +147,21 @@ function connectToTab(tabId, traceId) {
   });
 
   port.onDisconnect.addListener(() => {
-    if (!tabs.has(tabId)) return;  // tabs.onRemoved already handled this
+    if (!tabs.has(tabId)) return;
     tabs.delete(tabId);
-    entry.pendingReplies.clear();  // daemon rejectAll fires via tabClosed below
-    sendToDaemon({ type: 'tabClosed', traceId });
+    entry.pendingReplies.clear();
+    if (attempt < 5) {
+      setTimeout(() => {
+        browser.tabs.get(tabId).then(tab => {
+          const match = tab.url && PERNOSCO_URL_PATTERN.exec(tab.url);
+          if (match && !tabs.has(tabId)) {
+            connectToTab(tabId, match[1], attempt + 1);
+          }
+        }).catch(() => {});
+      }, 2000);
+    } else {
+      sendToDaemon({ type: 'tabClosed', traceId });
+    }
   });
 
   sendToDaemon({ type: 'tabRegistered', traceId });
