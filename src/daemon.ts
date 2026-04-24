@@ -7,6 +7,7 @@ import type { JSONRPCMessage, MessageExtraInfo } from '@modelcontextprotocol/sdk
 import fs from 'fs/promises';
 import { CONFIG_DIR, SERVER_JSON } from './spawn.js';
 import { TOOL_DEFS, handleToolCall } from './tools.js';
+import { VERSION } from './version.js';
 import { ConnectionError, SessionNotConnected, TraceNotFound } from './errors.js';
 import type { PernoscoBackend } from './backend.js';
 import type { Focus, PmlRow, SessionStatus } from './models.js';
@@ -160,7 +161,7 @@ export class Daemon {
   private handleShimConnect(ws: WebSocket, clientId: string): void {
     const transport = new ShimTransport(ws, clientId);
     const server = new Server(
-      { name: 'pernosco-mcp', version: '0.1.0' },
+      { name: 'pernosco-mcp', version: VERSION },
       { capabilities: { tools: {} } }
     );
 

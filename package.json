@@ -1,16 +1,16 @@
 {
   "name": "pernosco-mcp",
-  "version": "0.1.0",
+  "version": "0.0.0-dev",
   "description": "MCP server for Pernosco debugging sessions",
   "type": "module",
   "bin": {
     "pernosco-mcp": "./dist/cli.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/version.js && tsc",
     "postinstall": "node scripts/postinstall.js",
     "test": "vitest run",
-    "dev": "tsc --watch"
+    "dev": "node scripts/version.js && tsc --watch"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
