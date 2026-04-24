@@ -125,9 +125,9 @@ describe('formatStdoutStderr', () => {
       { items: [{ focus: { moment: { event: 200, instr: 3 } }, pml: { t: 'inline', c: ['world\n'] } }] },
     ];
     const text = formatStdoutStderr(rows as unknown[]);
-    expect(text).toContain('[1] event=100');
+    expect(text).toContain('[1] e=100');
     expect(text).toContain('hello');
-    expect(text).toContain('[2] event=200');
+    expect(text).toContain('[2] e=200');
     expect(text).toContain('world');
   });
 

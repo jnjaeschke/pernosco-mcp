@@ -128,7 +128,7 @@ export function formatStdoutStderr(rows: unknown[]): string {
       const moment = extractMoment(row);
       const pml = extractPmlFromStdoutRow(row);
       const text = pml ? pmlToText(pml).trim() : String(row);
-      const prefix = moment ? `[${i + 1}] event=${moment.event}` : `[${i + 1}]`;
+      const prefix = moment ? `[${i + 1}] e=${moment.event}` : `[${i + 1}]`;
       return `${prefix}  ${text}`;
     })
     .join('\n');

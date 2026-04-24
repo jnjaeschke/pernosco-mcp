@@ -319,7 +319,7 @@ describe('stdout_stderr', () => {
     });
     const result = await handleToolCall(daemon, 'c1', 'stdout_stderr', {});
     expect(mockBackend.rangeQuery).toHaveBeenCalledWith('stdouterr', {}, 200);
-    expect(result.content[0].text).toContain('event=100');
+    expect(result.content[0].text).toContain('e=100');
     expect(result.content[0].text).toContain('hello');
   });
 });
