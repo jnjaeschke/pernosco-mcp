@@ -221,7 +221,6 @@ export class Daemon {
       for (const backend of this.backends.values()) {
         backend.rejectAll(new ConnectionError('Extension reconnected'));
       }
-      this.backends.clear();
     }
     this.extensionWs = ws;
 
