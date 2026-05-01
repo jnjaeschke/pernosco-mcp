@@ -50,7 +50,15 @@ function connectDaemon(port) {
 
   daemonWs.onclose = () => {
     daemonWs = null;
-    setTimeout(() => connectDaemon(daemonPort), 5000);
+    setTimeout(async () => {
+      try {
+        const freshPort = await getDaemonPort();
+        connectDaemon(freshPort);
+      } catch (err) {
+        console.error('pernosco-mcp: failed to rediscover daemon port, retrying with last known port');
+        connectDaemon(daemonPort);
+      }
+    }, 5000);
   };
 
   daemonWs.onerror = (err) => {
