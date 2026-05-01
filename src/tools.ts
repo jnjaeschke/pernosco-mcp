@@ -166,6 +166,19 @@ export const TOOL_DEFS = [
     },
   },
   {
+    name: 'watch_variable',
+    description: 'Get the complete write history of a C++ variable. Evaluates the expression to find its memory address, then traces all writes. Simpler than manually using evaluate + watchpoint_history.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        expression: { type: 'string', description: 'C++ expression for the variable, e.g. "this->mURI" or "aLoadState"' },
+        type: { type: 'string', description: 'C++ type of the value, e.g. "uint64_t", "int32_t", "nsCOMPtr<nsIURI>"' },
+        limit: { type: 'number', description: 'Max results per direction (default 100)' },
+      },
+      required: ['expression', 'type'],
+    },
+  },
+  {
     name: 'step_to_prev_hit',
     description: 'Navigate backward to the previous execution of the current source line (or a specified line). Useful for reverse debugging.',
     inputSchema: {
@@ -205,6 +218,7 @@ export async function handleToolCall(
       case 'find_breakpoint_hits': return await findBreakpointHits(daemon, clientId, args);
       case 'dynamic_annotations': return await dynamicAnnotations(daemon, clientId, args);
       case 'source_read': return await sourceRead(daemon, clientId, args);
+      case 'watch_variable': return await watchVariable(daemon, clientId, args);
       case 'step_to_next_hit': return await stepToHit(daemon, clientId, args, 'next');
       case 'step_to_prev_hit': return await stepToHit(daemon, clientId, args, 'prev');
       default: return err(`Unknown tool: ${name}`);
@@ -439,6 +453,27 @@ async function sourceRead(daemon: Daemon, clientId: string, args: Record<string,
   const file = sourceUrl.split('/').pop() ?? sourceUrl;
   const numbered = result.lines.map((line, i) => `${startLine + i}: ${line}`).join('\n');
   return ok(`${file} (lines ${startLine}-${startLine + result.lines.length - 1}):\n\n${numbered}`);
+}
+
+async function watchVariable(daemon: Daemon, clientId: string, args: Record<string, unknown>): Promise<ToolResult> {
+  const expression = requireString(args, 'expression', 'Expression');
+  const type = requireString(args, 'type', 'Type');
+  const limit = typeof args.limit === 'number' ? args.limit : 100;
+
+  const backend = daemon.getBackend(clientId);
+
+  const evalRows = await backend.simpleQuery('evaluate', { payload: { expression: `&(${expression})` } });
+  const addrText = pmlRowsToText(evalRows).trim();
+  const addrMatch = addrText.match(/0x[0-9a-fA-F]+/);
+  if (!addrMatch) {
+    return err(`Could not determine address of "${expression}". Evaluate result: ${addrText}`);
+  }
+  const address = addrMatch[0];
+
+  const rows = await backend.rangeQuery('watchpoint', { address, type }, limit);
+  daemon.storeQueryResults(clientId, rows);
+  const count = rows.length;
+  return ok(`${count} write${count !== 1 ? 's' : ''} to ${expression} (${type} at ${address}):\n\n${pmlRowsToText(rows)}`);
 }
 
 async function stepToHit(daemon: Daemon, clientId: string, args: Record<string, unknown>, direction: 'next' | 'prev'): Promise<ToolResult> {

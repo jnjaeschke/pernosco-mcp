@@ -671,6 +671,52 @@ describe('step_to_next_hit', () => {
   });
 });
 
+// ─── watch_variable tool ─────────────────────────────────────────────────────
+
+describe('TOOL_DEFS watch_variable', () => {
+  it('contains watch_variable', () => {
+    expect(TOOL_DEFS.some((t: unknown) => (t as { name: string }).name === 'watch_variable')).toBe(true);
+  });
+});
+
+describe('watch_variable', () => {
+  it('evaluates address then queries watchpoint history', async () => {
+    const addrResult = [{ t: 'inline', c: ['(int*) 0x7fff1234abcd'] }];
+    const watchRows = [
+      { items: [{ focus: { moment: { event: 50, instr: 0 } }, pml: { t: 'inline', c: ['42'] } }] },
+    ];
+    const mockBackend = {
+      rangeQuery: vi.fn().mockResolvedValue(watchRows),
+      simpleQuery: vi.fn().mockResolvedValue(addrResult),
+      setFocus: vi.fn(), getStatus: vi.fn(), close: vi.fn(), notebookRead: vi.fn(), getSource: vi.fn(),
+    };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+      storeQueryResults: vi.fn(),
+    });
+    const result = await handleToolCall(daemon, 'c1', 'watch_variable', { expression: 'this->mCount', type: 'int' });
+    expect(mockBackend.simpleQuery).toHaveBeenCalledWith('evaluate', { payload: { expression: '&(this->mCount)' } });
+    expect(mockBackend.rangeQuery).toHaveBeenCalledWith('watchpoint', { address: '0x7fff1234abcd', type: 'int' }, 100);
+    expect(result.content[0].text).toContain('0x7fff1234abcd');
+    expect(result.content[0].text).toContain('this->mCount');
+  });
+
+  it('returns error when address not found in evaluate result', async () => {
+    const mockBackend = {
+      rangeQuery: vi.fn(), simpleQuery: vi.fn().mockResolvedValue([{ t: 'inline', c: ['<error: not an lvalue>'] }]),
+      setFocus: vi.fn(), getStatus: vi.fn(), close: vi.fn(), notebookRead: vi.fn(), getSource: vi.fn(),
+    };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+    });
+    const result = await handleToolCall(daemon, 'c1', 'watch_variable', { expression: '42', type: 'int' });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Could not determine address');
+  });
+});
+
 describe('step_to_prev_hit', () => {
   it('navigates to previous hit before current moment', async () => {
     const hitsRows = [
