@@ -63,6 +63,12 @@ async function waitForDaemon(): Promise<number> {
   throw new Error(`Daemon failed to start within ${MAX_WAIT_MS}ms`);
 }
 
+export async function atomicWriteJson(filePath: string, data: unknown): Promise<void> {
+  const tmp = `${filePath}.${process.pid}.tmp`;
+  await fs.writeFile(tmp, JSON.stringify(data));
+  await fs.rename(tmp, filePath);
+}
+
 export async function detectOrSpawn(): Promise<number> {
   await fs.mkdir(CONFIG_DIR, { recursive: true });
   // Ensure lock file exists for proper-lockfile

@@ -5,7 +5,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import type { Transport, TransportSendOptions } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { JSONRPCMessage, MessageExtraInfo } from '@modelcontextprotocol/sdk/types.js';
 import fs from 'fs/promises';
-import { CONFIG_DIR, SERVER_JSON } from './spawn.js';
+import { CONFIG_DIR, SERVER_JSON, atomicWriteJson } from './spawn.js';
 import { TOOL_DEFS, handleToolCall } from './tools.js';
 import { registerResources } from './resources.js';
 import { VERSION } from './version.js';
@@ -149,7 +149,7 @@ export class Daemon {
     const port = addr.port;
 
     await fs.mkdir(CONFIG_DIR, { recursive: true });
-    await fs.writeFile(SERVER_JSON, JSON.stringify({ port, pid: process.pid }));
+    await atomicWriteJson(SERVER_JSON, { port, pid: process.pid });
 
     this.resetIdleTimer();
     return port;
