@@ -55,8 +55,7 @@ export function registerResources(server: Server, daemon: Daemon, clientId: stri
       },
     ];
 
-    const traceId = daemon.getClientTraceId(clientId);
-    if (traceId) {
+    for (const traceId of daemon.listTabs()) {
       resources.push({
         uri: `pernosco://sessions/${traceId}`,
         name: `Session ${traceId}`,
