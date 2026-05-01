@@ -61,6 +61,8 @@ function wrapActiveInto(obj) {
   return cloneInto(preWrap, window, { cloneFunctions: true });
 }
 
+const MAX_MOMENT = MAX_MOMENT;
+
 /**
  * Build an "executions of" query centered around the UI's current position in
  * the trace.  The query will be limited to `limit` results in events occurring
@@ -91,7 +93,7 @@ async function buildRangeQuery(pclient, mixArgs, limit=50) {
         },
         startOffset: 0,
         endMoment: focusMoment,
-        endOffset: 1125899906842624,
+        endOffset: MAX_MOMENT,
         direction: 'backward',
         lines: limit
       },
@@ -100,12 +102,12 @@ async function buildRangeQuery(pclient, mixArgs, limit=50) {
       focus: queryFocus,
       limits: {
         startMoment: focusMoment,
-        startOffset: 1125899906842624,
+        startOffset: MAX_MOMENT,
         endMoment: {
-          event: 1125899906842624,
-          instr: 1125899906842624,
+          event: MAX_MOMENT,
+          instr: MAX_MOMENT,
         },
-        endOffset: 1125899906842624,
+        endOffset: MAX_MOMENT,
         direction: 'forward',
         lines: limit
       },
