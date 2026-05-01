@@ -19,4 +19,6 @@ export interface PernoscoBackend {
   close(): Promise<void>;
 
   notebookRead(): Promise<unknown>;
+
+  getSource(url: string, startLine?: number, endLine?: number): Promise<{ url: string; lines: string[] }>;
 }

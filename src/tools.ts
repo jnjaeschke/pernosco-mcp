@@ -142,6 +142,18 @@ export const TOOL_DEFS = [
       },
     },
   },
+  {
+    name: 'source_read',
+    description: 'Read source code lines from the current trace. Use after stack or session_status to see code around the current position.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        source_url: { type: 'string', description: 'Source URL as it appears in Pernosco (from stack or session_status output). If omitted, uses current focus source.' },
+        start_line: { type: 'number', description: 'First line to read (1-based, default: 1)' },
+        end_line: { type: 'number', description: 'Last line to read (inclusive). Defaults to start_line + 50.' },
+      },
+    },
+  },
 ];
 
 type ToolResult = { content: Array<{ type: 'text'; text: string }>; isError?: boolean };
@@ -170,6 +182,7 @@ export async function handleToolCall(
       case 'notebook_read': return await notebookRead(daemon, clientId);
       case 'find_breakpoint_hits': return await findBreakpointHits(daemon, clientId, args);
       case 'dynamic_annotations': return await dynamicAnnotations(daemon, clientId, args);
+      case 'source_read': return await sourceRead(daemon, clientId, args);
       default: return err(`Unknown tool: ${name}`);
     }
   } catch (e) {
@@ -384,4 +397,22 @@ async function dynamicAnnotations(daemon: Daemon, clientId: string, args: Record
   daemon.storeQueryResults(clientId, rows);
   const file = sourceUrl.split('/').pop() ?? sourceUrl;
   return ok(`Dynamic annotations for ${file}:\n\n${formatDynamicAnnotations(rows)}`);
+}
+
+async function sourceRead(daemon: Daemon, clientId: string, args: Record<string, unknown>): Promise<ToolResult> {
+  const backend = daemon.getBackend(clientId);
+  let sourceUrl = typeof args.source_url === 'string' ? args.source_url : null;
+  if (!sourceUrl) {
+    const status = await backend.getStatus();
+    sourceUrl = status.source?.url ?? null;
+  }
+  if (!sourceUrl) return err('No source URL available. Navigate to a source location first, or provide source_url.');
+
+  const startLine = typeof args.start_line === 'number' ? args.start_line : 1;
+  const endLine = typeof args.end_line === 'number' ? args.end_line : startLine + 50;
+
+  const result = await backend.getSource(sourceUrl, startLine, endLine);
+  const file = sourceUrl.split('/').pop() ?? sourceUrl;
+  const numbered = result.lines.map((line, i) => `${startLine + i}: ${line}`).join('\n');
+  return ok(`${file} (lines ${startLine}-${startLine + result.lines.length - 1}):\n\n${numbered}`);
 }

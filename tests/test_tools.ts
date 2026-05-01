@@ -322,7 +322,7 @@ describe('search', () => {
 // ─── Phase 3 tools ───────────────────────────────────────────────────────────
 
 describe('TOOL_DEFS Phase 3', () => {
-  for (const name of ['watchpoint_history', 'stdout_stderr', 'current_tasks', 'notebook_read', 'find_breakpoint_hits', 'dynamic_annotations']) {
+  for (const name of ['watchpoint_history', 'stdout_stderr', 'current_tasks', 'notebook_read', 'find_breakpoint_hits', 'dynamic_annotations', 'source_read']) {
     it(`contains ${name}`, () => {
       expect(TOOL_DEFS.some((t: unknown) => (t as { name: string }).name === name)).toBe(true);
     });
@@ -549,5 +549,61 @@ describe('dynamic_annotations', () => {
     await handleToolCall(daemon, 'c1', 'dynamic_annotations', { source_url: 'https://example.com/bar.cpp' });
     expect(mockBackend.simpleQuery).toHaveBeenCalledWith('dynamicAnnotations', { source: 'https://example.com/bar.cpp' });
     expect(mockBackend.getStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe('source_read', () => {
+  it('reads source from backend using current focus URL', async () => {
+    const mockBackend = {
+      rangeQuery: vi.fn(), simpleQuery: vi.fn(), setFocus: vi.fn(),
+      getStatus: vi.fn().mockResolvedValue({
+        focus: { moment: { event: 100, instr: 0 } },
+        source: { url: 'https://hg.mozilla.org/nsDocShell.cpp', pos: { line: 42 } },
+      }),
+      close: vi.fn(), notebookRead: vi.fn(),
+      getSource: vi.fn().mockResolvedValue({
+        url: 'https://hg.mozilla.org/nsDocShell.cpp',
+        lines: ['void nsDocShell::LoadURI(', '  nsIURI* aURI,', '  nsDocShellLoadState* aLoadState) {'],
+      }),
+    };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+    });
+    const result = await handleToolCall(daemon, 'c1', 'source_read', {});
+    expect(mockBackend.getSource).toHaveBeenCalledWith('https://hg.mozilla.org/nsDocShell.cpp', 1, 51);
+    expect(result.content[0].text).toContain('nsDocShell.cpp');
+    expect(result.content[0].text).toContain('LoadURI');
+  });
+
+  it('uses explicit source_url and line range', async () => {
+    const mockBackend = {
+      rangeQuery: vi.fn(), simpleQuery: vi.fn(), setFocus: vi.fn(),
+      getStatus: vi.fn(), close: vi.fn(), notebookRead: vi.fn(),
+      getSource: vi.fn().mockResolvedValue({ url: 'foo.cpp', lines: ['line40', 'line41'] }),
+    };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+    });
+    const result = await handleToolCall(daemon, 'c1', 'source_read', { source_url: 'foo.cpp', start_line: 40, end_line: 41 });
+    expect(mockBackend.getSource).toHaveBeenCalledWith('foo.cpp', 40, 41);
+    expect(result.content[0].text).toContain('40: line40');
+    expect(result.content[0].text).toContain('41: line41');
+  });
+
+  it('returns error when no source URL available', async () => {
+    const mockBackend = {
+      rangeQuery: vi.fn(), simpleQuery: vi.fn(), setFocus: vi.fn(),
+      getStatus: vi.fn().mockResolvedValue({ focus: { moment: { event: 1, instr: 0 } }, source: null }),
+      close: vi.fn(), notebookRead: vi.fn(), getSource: vi.fn(),
+    };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+    });
+    const result = await handleToolCall(daemon, 'c1', 'source_read', {});
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('No source URL');
   });
 });

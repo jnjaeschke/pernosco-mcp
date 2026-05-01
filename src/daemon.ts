@@ -118,6 +118,10 @@ class ExtensionBackend implements PernoscoBackend {
   notebookRead(): Promise<unknown> {
     return this.query<unknown>('storageDump', {});
   }
+
+  getSource(url: string, startLine?: number, endLine?: number): Promise<{ url: string; lines: string[] }> {
+    return this.query<{ url: string; lines: string[] }>('getSource', { url, startLine, endLine });
+  }
 }
 
 // ─── ClientSession ──────────────────────────────────────────────────────────

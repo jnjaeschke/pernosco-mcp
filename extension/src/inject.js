@@ -371,6 +371,20 @@ class ContentScriptServer extends BridgeServer {
     reply(this.pclient.storageData);
   }
 
+  async onMsg_getSource({ url, startLine, endLine }, reply) {
+    const sourceText = await new window.Promise((resolve) => {
+      this.pclient.requestSource(url, false, exportFunction(resolve, window));
+    });
+
+    const text = sourceText.wrappedJSObject.originalText;
+    const allLines = text.split('\n');
+    const start = (startLine || 1) - 1;
+    const end = endLine || allLines.length;
+    const lines = allLines.slice(start, end);
+
+    reply({ url, lines });
+  }
+
   async onMsg_simpleQuery({ name, mixArgs }, reply) {
     console.log('processing simple query for', name);
     let queryId;

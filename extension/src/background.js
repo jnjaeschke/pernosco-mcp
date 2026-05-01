@@ -128,7 +128,8 @@ function handleDaemonMessage(msg) {
     }
 
     case 'rangeQuery':
-    case 'simpleQuery': {
+    case 'simpleQuery':
+    case 'getSource': {
       const entry = findTabByTraceId(msg.traceId);
       if (!entry) {
         sendToDaemon({ type: 'reply', replyId: msg.replyId, payload: null, extra: { error: `No open tab for trace ${msg.traceId}` } });
