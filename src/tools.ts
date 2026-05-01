@@ -1,5 +1,5 @@
 import type { Daemon } from './daemon.js';
-import { pmlRowsToText, formatStdoutStderr, formatDynamicAnnotations, formatStack } from './pml.js';
+import { pmlRowsToText, formatStdoutStderr, formatDynamicAnnotations, formatStack, asItemsRow } from './pml.js';
 import type { Focus } from './models.js';
 
 export const TOOL_DEFS = [
@@ -154,6 +154,28 @@ export const TOOL_DEFS = [
       },
     },
   },
+  {
+    name: 'step_to_next_hit',
+    description: 'Navigate forward to the next execution of the current source line (or a specified line). Useful for stepping through loop iterations or repeated calls.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', description: 'Source file (defaults to current focus source)' },
+        line: { type: 'number', description: 'Line number (defaults to current focus line)' },
+      },
+    },
+  },
+  {
+    name: 'step_to_prev_hit',
+    description: 'Navigate backward to the previous execution of the current source line (or a specified line). Useful for reverse debugging.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', description: 'Source file (defaults to current focus source)' },
+        line: { type: 'number', description: 'Line number (defaults to current focus line)' },
+      },
+    },
+  },
 ];
 
 type ToolResult = { content: Array<{ type: 'text'; text: string }>; isError?: boolean };
@@ -183,6 +205,8 @@ export async function handleToolCall(
       case 'find_breakpoint_hits': return await findBreakpointHits(daemon, clientId, args);
       case 'dynamic_annotations': return await dynamicAnnotations(daemon, clientId, args);
       case 'source_read': return await sourceRead(daemon, clientId, args);
+      case 'step_to_next_hit': return await stepToHit(daemon, clientId, args, 'next');
+      case 'step_to_prev_hit': return await stepToHit(daemon, clientId, args, 'prev');
       default: return err(`Unknown tool: ${name}`);
     }
   } catch (e) {
@@ -415,4 +439,60 @@ async function sourceRead(daemon: Daemon, clientId: string, args: Record<string,
   const file = sourceUrl.split('/').pop() ?? sourceUrl;
   const numbered = result.lines.map((line, i) => `${startLine + i}: ${line}`).join('\n');
   return ok(`${file} (lines ${startLine}-${startLine + result.lines.length - 1}):\n\n${numbered}`);
+}
+
+async function stepToHit(daemon: Daemon, clientId: string, args: Record<string, unknown>, direction: 'next' | 'prev'): Promise<ToolResult> {
+  const backend = daemon.getBackend(clientId);
+  const status = await backend.getStatus();
+  const currentMoment = status.focus.moment;
+
+  let file = typeof args.file === 'string' ? args.file : null;
+  let line = typeof args.line === 'number' ? args.line : null;
+
+  if (!file || !line) {
+    if (!status.source?.url) return err('No source location at current focus. Provide file and line explicitly.');
+    file = file ?? status.source.url;
+    line = line ?? (status.source.pos as Record<string, number> | undefined)?.line ?? null;
+    if (!line) return err('Cannot determine current line. Provide line explicitly.');
+  }
+
+  const params: Record<string, unknown> = { url: file, points: [{ l: line, c: 0 }] };
+  const rows = await backend.rangeQuery('breakpoint', params, 50);
+  daemon.storeQueryResults(clientId, rows);
+
+  const candidates = rows
+    .map((row, i) => {
+      const itemsRow = asItemsRow(row);
+      const moment = itemsRow?.items[0]?.focus?.moment;
+      return moment ? { index: i, moment } : null;
+    })
+    .filter((c): c is { index: number; moment: { event: number; instr: number } } => c !== null);
+
+  let target: typeof candidates[number] | null = null;
+
+  if (direction === 'next') {
+    target = candidates.find(c =>
+      c.moment.event > currentMoment.event ||
+      (c.moment.event === currentMoment.event && c.moment.instr > currentMoment.instr)
+    ) ?? null;
+  } else {
+    target = [...candidates].reverse().find(c =>
+      c.moment.event < currentMoment.event ||
+      (c.moment.event === currentMoment.event && c.moment.instr < currentMoment.instr)
+    ) ?? null;
+  }
+
+  if (!target) {
+    const dirLabel = direction === 'next' ? 'later' : 'earlier';
+    return ok(`No ${dirLabel} hit of ${(typeof file === 'string' ? file : '').split('/').pop()}:${line} found in the trace.`);
+  }
+
+  const focusRow = rows[target.index];
+  const itemsRow = asItemsRow(focusRow);
+  const focusObj = itemsRow?.items[0]?.focus;
+  if (!focusObj) return err('Internal error: hit has no focus');
+
+  await backend.setFocus(focusObj);
+  const { event, instr } = target.moment;
+  return ok(`Stepped ${direction} to event=${event}, instr=${instr} at ${(typeof file === 'string' ? file : '').split('/').pop()}:${line} [${target.index + 1}/${rows.length}]`);
 }

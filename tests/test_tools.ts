@@ -607,3 +607,94 @@ describe('source_read', () => {
     expect(result.content[0].text).toContain('No source URL');
   });
 });
+
+// ─── Stepping tools ─────────────────────────────────────────────────────────
+
+describe('TOOL_DEFS stepping', () => {
+  it('contains step_to_next_hit', () => {
+    expect(TOOL_DEFS.some((t: unknown) => (t as { name: string }).name === 'step_to_next_hit')).toBe(true);
+  });
+  it('contains step_to_prev_hit', () => {
+    expect(TOOL_DEFS.some((t: unknown) => (t as { name: string }).name === 'step_to_prev_hit')).toBe(true);
+  });
+});
+
+describe('step_to_next_hit', () => {
+  it('navigates to next hit after current moment', async () => {
+    const hitsRows = [
+      { items: [{ focus: { moment: { event: 100, instr: 0 } }, pml: { t: 'inline', c: ['hit1'] } }] },
+      { items: [{ focus: { moment: { event: 200, instr: 0 } }, pml: { t: 'inline', c: ['hit2'] } }] },
+      { items: [{ focus: { moment: { event: 300, instr: 0 } }, pml: { t: 'inline', c: ['hit3'] } }] },
+    ];
+    const mockBackend = {
+      rangeQuery: vi.fn().mockResolvedValue(hitsRows),
+      simpleQuery: vi.fn(),
+      setFocus: vi.fn().mockResolvedValue(undefined),
+      getStatus: vi.fn().mockResolvedValue({
+        focus: { moment: { event: 200, instr: 0 } },
+        source: { url: 'https://example.com/foo.cpp', pos: { line: 42 } },
+      }),
+      close: vi.fn(), notebookRead: vi.fn(), getSource: vi.fn(),
+    };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+      storeQueryResults: vi.fn(),
+    });
+    const result = await handleToolCall(daemon, 'c1', 'step_to_next_hit', {});
+    expect(mockBackend.setFocus).toHaveBeenCalledWith({ moment: { event: 300, instr: 0 } });
+    expect(result.content[0].text).toContain('event=300');
+  });
+
+  it('reports no hit when at last occurrence', async () => {
+    const hitsRows = [
+      { items: [{ focus: { moment: { event: 100, instr: 0 } }, pml: { t: 'inline', c: ['hit1'] } }] },
+    ];
+    const mockBackend = {
+      rangeQuery: vi.fn().mockResolvedValue(hitsRows),
+      simpleQuery: vi.fn(),
+      setFocus: vi.fn(),
+      getStatus: vi.fn().mockResolvedValue({
+        focus: { moment: { event: 100, instr: 0 } },
+        source: { url: 'https://example.com/foo.cpp', pos: { line: 42 } },
+      }),
+      close: vi.fn(), notebookRead: vi.fn(), getSource: vi.fn(),
+    };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+      storeQueryResults: vi.fn(),
+    });
+    const result = await handleToolCall(daemon, 'c1', 'step_to_next_hit', {});
+    expect(mockBackend.setFocus).not.toHaveBeenCalled();
+    expect(result.content[0].text).toContain('No later hit');
+  });
+});
+
+describe('step_to_prev_hit', () => {
+  it('navigates to previous hit before current moment', async () => {
+    const hitsRows = [
+      { items: [{ focus: { moment: { event: 100, instr: 0 } }, pml: { t: 'inline', c: ['hit1'] } }] },
+      { items: [{ focus: { moment: { event: 200, instr: 0 } }, pml: { t: 'inline', c: ['hit2'] } }] },
+      { items: [{ focus: { moment: { event: 300, instr: 0 } }, pml: { t: 'inline', c: ['hit3'] } }] },
+    ];
+    const mockBackend = {
+      rangeQuery: vi.fn().mockResolvedValue(hitsRows),
+      simpleQuery: vi.fn(),
+      setFocus: vi.fn().mockResolvedValue(undefined),
+      getStatus: vi.fn().mockResolvedValue({
+        focus: { moment: { event: 200, instr: 0 } },
+        source: { url: 'https://example.com/foo.cpp', pos: { line: 42 } },
+      }),
+      close: vi.fn(), notebookRead: vi.fn(), getSource: vi.fn(),
+    };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+      storeQueryResults: vi.fn(),
+    });
+    const result = await handleToolCall(daemon, 'c1', 'step_to_prev_hit', {});
+    expect(mockBackend.setFocus).toHaveBeenCalledWith({ moment: { event: 100, instr: 0 } });
+    expect(result.content[0].text).toContain('event=100');
+  });
+});
