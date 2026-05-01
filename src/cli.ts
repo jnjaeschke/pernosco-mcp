@@ -1,9 +1,7 @@
-import { detectOrSpawn } from './spawn.js';
 import { runShim } from './shim.js';
 
 async function main(): Promise<void> {
-  const port = await detectOrSpawn();
-  await runShim(port);
+  await runShim();
 }
 
 main().catch(err => {
