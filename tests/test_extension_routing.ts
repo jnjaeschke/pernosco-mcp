@@ -41,6 +41,55 @@ describe('daemon extension message routing', () => {
   });
 });
 
+describe('extension error replies', () => {
+  it('query to non-existent trace returns error quickly', async () => {
+    const { Daemon } = await import('../src/daemon.js');
+    const { MockExtension } = await import('./mock_extension.js');
+
+    const daemon = new Daemon();
+    const port = await daemon.start();
+    const ext = new MockExtension();
+    await ext.connect(port);
+    await new Promise(r => setTimeout(r, 100));
+
+    // Register a known tab
+    ext.registerTab('known-trace', () => ({ focus: { moment: { event: 1, instr: 0 } } }));
+    await new Promise(r => setTimeout(r, 50));
+
+    // Try getTraceBackend for unknown trace — should throw immediately
+    expect(() => daemon.getTraceBackend('unknown-trace')).toThrow('not found');
+
+    ext.close();
+    await daemon.shutdown();
+  });
+
+  it('query on forgotten tab returns QueryError quickly, not QueryTimeout', async () => {
+    const { Daemon } = await import('../src/daemon.js');
+    const { MockExtension } = await import('./mock_extension.js');
+    const { QueryError } = await import('../src/errors.js');
+
+    const daemon = new Daemon();
+    const port = await daemon.start();
+    const ext = new MockExtension();
+    await ext.connect(port);
+    await new Promise(r => setTimeout(r, 100));
+
+    ext.registerTab('trace-a', () => ({}));
+    await new Promise(r => setTimeout(r, 50));
+
+    // Silently remove from extension without telling daemon — backend still exists
+    ext.forgetTab('trace-a');
+
+    const backend = daemon.getTraceBackend('trace-a');
+    const start = Date.now();
+    await expect(backend.getStatus()).rejects.toThrow(QueryError);
+    expect(Date.now() - start).toBeLessThan(1000);
+
+    ext.close();
+    await daemon.shutdown();
+  });
+});
+
 describe('replyId format', () => {
   it('traceId::rN format round-trips through indexOf split', () => {
     const traceId = 'ps0J9-pJ2TxCDiz5XJu-2g';

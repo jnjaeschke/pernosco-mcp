@@ -32,6 +32,10 @@ export class MockExtension {
     this.send({ type: 'tabClosed', traceId });
   }
 
+  forgetTab(traceId: string): void {
+    this.tabs.delete(traceId);
+  }
+
   close(): void {
     this.ws?.close();
     this.ws = null;
@@ -62,7 +66,11 @@ export class MockExtension {
         const traceId = String(msg.traceId ?? '');
         const tab = this.tabs.get(traceId);
         const replyId = msg.replyId;
-        if (tab?.onQuery) {
+        if (!tab) {
+          this.send({ type: 'reply', replyId, payload: null, extra: { error: `No open tab for trace ${traceId}` } });
+          break;
+        }
+        if (tab.onQuery) {
           try {
             const payload = msg.payload as Record<string, unknown>;
             const result = tab.onQuery(String(msg.type), payload);

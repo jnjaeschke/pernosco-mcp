@@ -82,7 +82,10 @@ function handleDaemonMessage(msg) {
 
     case 'setFocus': {
       const entry = findTabByTraceId(msg.traceId);
-      if (!entry) return;
+      if (!entry) {
+        sendToDaemon({ type: 'reply', replyId: msg.replyId, payload: null, extra: { error: `No open tab for trace ${msg.traceId}` } });
+        return;
+      }
       const localReplyId = `reply${nextMsgId++}`;
       const msgId = `msg${nextMsgId++}`;
       entry.pendingReplies.set(localReplyId, msg.replyId);
@@ -92,7 +95,10 @@ function handleDaemonMessage(msg) {
 
     case 'getStatus': {
       const entry = findTabByTraceId(msg.traceId);
-      if (!entry) return;
+      if (!entry) {
+        sendToDaemon({ type: 'reply', replyId: msg.replyId, payload: null, extra: { error: `No open tab for trace ${msg.traceId}` } });
+        return;
+      }
       const localReplyId = `reply${nextMsgId++}`;
       const msgId = `msg${nextMsgId++}`;
       entry.pendingReplies.set(localReplyId, msg.replyId);
@@ -102,7 +108,10 @@ function handleDaemonMessage(msg) {
 
     case 'storageDump': {
       const entry = findTabByTraceId(msg.traceId);
-      if (!entry) return;
+      if (!entry) {
+        sendToDaemon({ type: 'reply', replyId: msg.replyId, payload: null, extra: { error: `No open tab for trace ${msg.traceId}` } });
+        return;
+      }
       const localReplyId = `reply${nextMsgId++}`;
       const msgId = `msg${nextMsgId++}`;
       entry.pendingReplies.set(localReplyId, msg.replyId);
@@ -113,7 +122,10 @@ function handleDaemonMessage(msg) {
     case 'rangeQuery':
     case 'simpleQuery': {
       const entry = findTabByTraceId(msg.traceId);
-      if (!entry) return;
+      if (!entry) {
+        sendToDaemon({ type: 'reply', replyId: msg.replyId, payload: null, extra: { error: `No open tab for trace ${msg.traceId}` } });
+        return;
+      }
       const localReplyId = `reply${nextMsgId++}`;
       const msgId = `msg${nextMsgId++}`;
       entry.pendingReplies.set(localReplyId, msg.replyId);
