@@ -185,6 +185,18 @@ function err(text: string): ToolResult {
   return { content: [{ type: 'text', text }], isError: true };
 }
 
+function requireString(args: Record<string, unknown>, key: string, label: string): string {
+  const val = typeof args[key] === 'string' ? (args[key] as string).trim() : '';
+  if (!val) throw new Error(`${label} is required`);
+  return val;
+}
+
+function requirePositiveInt(args: Record<string, unknown>, key: string, label: string): number {
+  const val = typeof args[key] === 'number' ? args[key] as number : 0;
+  if (val < 1) throw new Error(`${label} must be a positive integer`);
+  return val;
+}
+
 function extractTraceId(urlOrId: string): string {
   const match = urlOrId.match(/\/debug\/([^/?#]+)/);
   return match ? match[1] : urlOrId;
@@ -235,7 +247,7 @@ function sessionDisconnect(daemon: Daemon, clientId: string): ToolResult {
 }
 
 async function findExecutions(daemon: Daemon, clientId: string, args: Record<string, unknown>): Promise<ToolResult> {
-  const symbol = String(args.symbol ?? '');
+  const symbol = requireString(args, 'symbol', 'Symbol');
   const limit = typeof args.limit === 'number' ? args.limit : 50;
   const params: Record<string, unknown> = { symbol };
   if (args.print_exprs) params.print = String(args.print_exprs);
@@ -255,7 +267,7 @@ async function stackTool(daemon: Daemon, clientId: string): Promise<ToolResult> 
 }
 
 async function evaluateTool(daemon: Daemon, clientId: string, args: Record<string, unknown>): Promise<ToolResult> {
-  const expression = String(args.expression ?? '');
+  const expression = requireString(args, 'expression', 'Expression');
   const backend = daemon.getBackend(clientId);
   const rows = await backend.simpleQuery('evaluate', { payload: { expression } });
   daemon.storeQueryResults(clientId, rows);
@@ -284,7 +296,7 @@ async function taskTreeTool(daemon: Daemon, clientId: string): Promise<ToolResul
 }
 
 async function searchTool(daemon: Daemon, clientId: string, args: Record<string, unknown>): Promise<ToolResult> {
-  const query = String(args.query ?? '');
+  const query = requireString(args, 'query', 'Query');
   const maxResults = typeof args.max_results === 'number' ? args.max_results : 20;
   const backend = daemon.getBackend(clientId);
   const rows = await backend.simpleQuery('search', { input: query, maxResults });
@@ -293,8 +305,8 @@ async function searchTool(daemon: Daemon, clientId: string, args: Record<string,
 }
 
 async function watchpointHistory(daemon: Daemon, clientId: string, args: Record<string, unknown>): Promise<ToolResult> {
-  const address = String(args.address ?? '');
-  const type = String(args.type ?? '');
+  const address = requireString(args, 'address', 'Address');
+  const type = requireString(args, 'type', 'Type');
   const limit = typeof args.limit === 'number' ? args.limit : 100;
   const backend = daemon.getBackend(clientId);
   const rows = await backend.rangeQuery('watchpoint', { address, type }, limit);
@@ -345,8 +357,8 @@ async function notebookRead(daemon: Daemon, clientId: string): Promise<ToolResul
 }
 
 async function findBreakpointHits(daemon: Daemon, clientId: string, args: Record<string, unknown>): Promise<ToolResult> {
-  const file = String(args.file ?? '');
-  const line = typeof args.line === 'number' ? args.line : 0;
+  const file = requireString(args, 'file', 'File');
+  const line = requirePositiveInt(args, 'line', 'Line');
   const limit = typeof args.limit === 'number' ? args.limit : 50;
   const params: Record<string, unknown> = { url: file, points: [{ l: line, c: 0 }] };
   if (args.print_exprs) params.print = String(args.print_exprs);

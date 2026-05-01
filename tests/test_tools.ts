@@ -449,6 +449,72 @@ describe('find_breakpoint_hits', () => {
   });
 });
 
+describe('input validation', () => {
+  function connectedDaemon(backendOverrides: Record<string, unknown> = {}) {
+    const mockBackend = {
+      rangeQuery: vi.fn().mockResolvedValue([]),
+      simpleQuery: vi.fn().mockResolvedValue([]),
+      setFocus: vi.fn(),
+      getStatus: vi.fn(),
+      close: vi.fn(),
+      notebookRead: vi.fn(),
+      ...backendOverrides,
+    };
+    return mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('t1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+      storeQueryResults: vi.fn(),
+    });
+  }
+
+  it('find_executions rejects empty symbol', async () => {
+    const result = await handleToolCall(connectedDaemon(), 'c1', 'find_executions', { symbol: '' });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Symbol');
+  });
+
+  it('find_executions rejects missing symbol', async () => {
+    const result = await handleToolCall(connectedDaemon(), 'c1', 'find_executions', {});
+    expect(result.isError).toBe(true);
+  });
+
+  it('evaluate rejects empty expression', async () => {
+    const result = await handleToolCall(connectedDaemon(), 'c1', 'evaluate', { expression: '' });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Expression');
+  });
+
+  it('find_breakpoint_hits rejects line 0', async () => {
+    const result = await handleToolCall(connectedDaemon(), 'c1', 'find_breakpoint_hits', { file: 'foo.cpp', line: 0 });
+    expect(result.isError).toBe(true);
+  });
+
+  it('find_breakpoint_hits rejects empty file', async () => {
+    const result = await handleToolCall(connectedDaemon(), 'c1', 'find_breakpoint_hits', { file: '', line: 10 });
+    expect(result.isError).toBe(true);
+  });
+
+  it('watchpoint_history rejects empty address', async () => {
+    const result = await handleToolCall(connectedDaemon(), 'c1', 'watchpoint_history', { address: '', type: 'uint64_t' });
+    expect(result.isError).toBe(true);
+  });
+
+  it('watchpoint_history rejects empty type', async () => {
+    const result = await handleToolCall(connectedDaemon(), 'c1', 'watchpoint_history', { address: '0x1234', type: '' });
+    expect(result.isError).toBe(true);
+  });
+
+  it('search rejects empty query', async () => {
+    const result = await handleToolCall(connectedDaemon(), 'c1', 'search', { query: '' });
+    expect(result.isError).toBe(true);
+  });
+
+  it('goto rejects neither index nor focus', async () => {
+    const result = await handleToolCall(connectedDaemon(), 'c1', 'goto', {});
+    expect(result.isError).toBe(true);
+  });
+});
+
 describe('dynamic_annotations', () => {
   it('calls simpleQuery dynamicAnnotations with source url from status', async () => {
     const mockBackend = {
