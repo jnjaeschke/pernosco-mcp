@@ -179,6 +179,10 @@ export class Daemon {
       if (msg.type === 'register_shim') {
         this.handleShimConnect(ws, String(msg.clientId ?? crypto.randomUUID()));
       } else if (msg.type === 'register_extension') {
+        const extVersion = typeof msg.version === 'string' ? msg.version : 'unknown';
+        if (extVersion !== VERSION) {
+          console.warn(`pernosco-mcp: extension version ${extVersion} != daemon version ${VERSION}. Consider reloading the extension.`);
+        }
         this.handleExtensionConnect(ws);
       } else {
         ws.close();
@@ -247,7 +251,7 @@ export class Daemon {
       this.resetIdleTimer();
     });
 
-    ws.send(JSON.stringify({ type: 'listTabs', replyId: 'startup-list' }));
+    ws.send(JSON.stringify({ type: 'listTabs', replyId: 'startup-list', version: VERSION }));
   }
 
   private handleExtensionMessage(msg: Record<string, unknown>): void {

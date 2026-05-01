@@ -34,7 +34,7 @@ function connectDaemon(port) {
   daemonWs = new WebSocket(`ws://127.0.0.1:${port}`);
 
   daemonWs.onopen = () => {
-    daemonWs.send(JSON.stringify({ type: 'register_extension' }));
+    daemonWs.send(JSON.stringify({ type: 'register_extension', version: '0.1.0' }));
     for (const msg of pendingMessages) daemonWs.send(JSON.stringify(msg));
     pendingMessages = [];
     for (const entry of tabs.values()) {
