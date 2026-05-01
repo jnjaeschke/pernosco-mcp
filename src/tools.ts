@@ -209,7 +209,10 @@ async function sessionConnect(daemon: Daemon, clientId: string, args: Record<str
   if (!daemon.hasTab(traceId)) {
     const fullUrl = url.startsWith('http') ? url : `https://pernos.co/debug/${traceId}/index.html`;
     daemon.requestOpenTab(fullUrl);
-    return ok(`Opening trace ${traceId} in Firefox. Call session_connect again once the tab has loaded.`);
+    const loaded = await daemon.waitForTab(traceId);
+    if (!loaded) {
+      return err(`Timed out waiting for trace ${traceId} to load in Firefox. Is the Pernosco tab open?`);
+    }
   }
 
   daemon.bindClient(clientId, traceId);

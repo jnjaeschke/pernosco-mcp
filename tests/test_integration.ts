@@ -101,10 +101,16 @@ describe('integration', () => {
     expect(text).toContain('test-trace-1');
   });
 
-  it('session_connect with unknown trace requests tab open', async () => {
-    const result = await shimCall('session_connect', { url: 'unknown-trace' });
+  it('session_connect waits for tab registration', async () => {
+    setTimeout(() => ext.registerTab('delayed-trace', (type) => {
+      if (type === 'getStatus') return { focus: { moment: { event: 1, instr: 0 } }, source: null };
+      return [];
+    }), 200);
+
+    const result = await shimCall('session_connect', { url: 'delayed-trace' });
     const text = (result as any).content[0].text;
-    expect(text).toContain('Opening');
+    expect(text).toContain('Connected');
+    expect(text).toContain('delayed-trace');
   });
 
   it('find_executions returns error when not connected', async () => {

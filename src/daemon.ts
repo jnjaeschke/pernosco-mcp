@@ -137,6 +137,7 @@ export class Daemon {
   private extensionWs: WebSocket | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private lastResults = new Map<string, PmlRow[]>();
+  private tabWaiters = new Map<string, Array<{ resolve: () => void; timer: ReturnType<typeof setTimeout> }>>();
   private wss!: WebSocketServer;
 
   async start(): Promise<number> {
@@ -280,6 +281,14 @@ export class Daemon {
         if (!this.backends.has(traceId)) {
           this.backends.set(traceId, new ExtensionBackend(this, traceId));
         }
+        const waiters = this.tabWaiters.get(traceId);
+        if (waiters) {
+          for (const w of waiters) {
+            clearTimeout(w.timer);
+            w.resolve();
+          }
+          this.tabWaiters.delete(traceId);
+        }
         break;
       }
       case 'tabClosed': {
@@ -349,6 +358,25 @@ export class Daemon {
 
   hasTab(traceId: string): boolean {
     return this.backends.has(traceId);
+  }
+
+  waitForTab(traceId: string, timeoutMs = 30000): Promise<boolean> {
+    if (this.backends.has(traceId)) return Promise.resolve(true);
+    return new Promise(resolve => {
+      const timer = setTimeout(() => {
+        const waiters = this.tabWaiters.get(traceId);
+        if (waiters) {
+          const idx = waiters.findIndex(w => w.timer === timer);
+          if (idx !== -1) waiters.splice(idx, 1);
+          if (waiters.length === 0) this.tabWaiters.delete(traceId);
+        }
+        resolve(false);
+      }, timeoutMs);
+      const waiter = { resolve: () => resolve(true), timer };
+      const existing = this.tabWaiters.get(traceId);
+      if (existing) existing.push(waiter);
+      else this.tabWaiters.set(traceId, [waiter]);
+    });
   }
 
   requestOpenTab(url: string): void {
