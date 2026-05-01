@@ -27,6 +27,12 @@ export class TabNotFound extends PernoscoError {
   }
 }
 
+export class ClientNotFound extends PernoscoError {
+  constructor(clientId: string) {
+    super(`Client not found: ${clientId}`);
+  }
+}
+
 export class QueryTimeout extends PernoscoError {
   constructor(type: string, timeoutMs: number) {
     super(`Query '${type}' timed out after ${timeoutMs}ms`);

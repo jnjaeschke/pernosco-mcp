@@ -55,6 +55,30 @@ describe('session_connect', () => {
     expect(daemon.bindClient).toHaveBeenCalledWith('c1', 'ps0J9-pJ2TxCDiz5XJu-2g');
   });
 
+  it('extracts trace ID from URL without trailing slash', async () => {
+    const daemon = mockDaemon({ hasTab: vi.fn().mockReturnValue(true) });
+    await handleToolCall(daemon, 'c1', 'session_connect', {
+      url: 'https://pernos.co/debug/abc123',
+    });
+    expect(daemon.bindClient).toHaveBeenCalledWith('c1', 'abc123');
+  });
+
+  it('extracts trace ID from URL with query string', async () => {
+    const daemon = mockDaemon({ hasTab: vi.fn().mockReturnValue(true) });
+    await handleToolCall(daemon, 'c1', 'session_connect', {
+      url: 'https://pernos.co/debug/abc123?foo=bar',
+    });
+    expect(daemon.bindClient).toHaveBeenCalledWith('c1', 'abc123');
+  });
+
+  it('extracts trace ID from URL with fragment', async () => {
+    const daemon = mockDaemon({ hasTab: vi.fn().mockReturnValue(true) });
+    await handleToolCall(daemon, 'c1', 'session_connect', {
+      url: 'https://pernos.co/debug/abc123#section',
+    });
+    expect(daemon.bindClient).toHaveBeenCalledWith('c1', 'abc123');
+  });
+
   it('requests tab open but does NOT bind when tab not found', async () => {
     const daemon = mockDaemon({ hasTab: vi.fn().mockReturnValue(false) });
     await handleToolCall(daemon, 'c1', 'session_connect', {
@@ -207,6 +231,18 @@ describe('evaluate', () => {
     });
     await handleToolCall(daemon, 'c1', 'evaluate', { expression: 'this->mCount' });
     expect(mockBackend.simpleQuery).toHaveBeenCalledWith('evaluate', { payload: { expression: 'this->mCount' } });
+  });
+
+  it('stores query results for goto navigation', async () => {
+    const evalRows = [{ items: [{ focus: { moment: { event: 42, instr: 0 } }, pml: { t: 'inline', c: ['42'] } }] }];
+    const mockBackend = { rangeQuery: vi.fn(), simpleQuery: vi.fn().mockResolvedValue(evalRows), setFocus: vi.fn(), getStatus: vi.fn(), close: vi.fn() };
+    const daemon = mockDaemon({
+      getClientTraceId: vi.fn().mockReturnValue('trace1'),
+      getBackend: vi.fn().mockReturnValue(mockBackend),
+      storeQueryResults: vi.fn(),
+    });
+    await handleToolCall(daemon, 'c1', 'evaluate', { expression: 'this->mCount' });
+    expect(daemon.storeQueryResults).toHaveBeenCalledWith('c1', evalRows);
   });
 });
 

@@ -86,11 +86,7 @@ export function registerResources(server: Server, daemon: Daemon, clientId: stri
 
     if (uri.startsWith('pernosco://sessions/')) {
       const traceId = uri.replace('pernosco://sessions/', '');
-      if (!daemon.hasTab(traceId)) {
-        throw new Error(`No open tab for trace ${traceId}`);
-      }
-      daemon.bindClient(clientId, traceId);
-      const backend = daemon.getBackend(clientId);
+      const backend = daemon.getTraceBackend(traceId);
       const status = await backend.getStatus();
       const { event, instr } = status.focus.moment;
       const src = status.source;

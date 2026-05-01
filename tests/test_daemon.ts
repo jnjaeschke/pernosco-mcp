@@ -19,6 +19,12 @@ describe('Daemon.bindClient', () => {
     const daemon = new Daemon();
     expect(() => daemon.bindClient('c1', 'bad::rtraceId')).toThrow('reserved separator');
   });
+
+  it('throws ClientNotFound for unknown clientId', async () => {
+    const { Daemon } = await import('../src/daemon.js');
+    const daemon = new Daemon();
+    expect(() => daemon.bindClient('nonexistent', 'someTrace')).toThrow('Client not found');
+  });
 });
 
 describe('withTimeout', () => {

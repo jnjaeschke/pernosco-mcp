@@ -186,7 +186,7 @@ function err(text: string): ToolResult {
 }
 
 function extractTraceId(urlOrId: string): string {
-  const match = urlOrId.match(/\/debug\/([^/]+)\//);
+  const match = urlOrId.match(/\/debug\/([^/?#]+)/);
   return match ? match[1] : urlOrId;
 }
 
@@ -258,6 +258,7 @@ async function evaluateTool(daemon: Daemon, clientId: string, args: Record<strin
   const expression = String(args.expression ?? '');
   const backend = daemon.getBackend(clientId);
   const rows = await backend.simpleQuery('evaluate', { payload: { expression } });
+  daemon.storeQueryResults(clientId, rows);
   return ok(pmlRowsToText(rows));
 }
 
