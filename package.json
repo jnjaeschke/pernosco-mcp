@@ -3,6 +3,10 @@
   "version": "0.0.0-dev",
   "description": "MCP server for Pernosco debugging sessions",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jnjaeschke/pernosco-mcp.git"
+  },
   "bin": {
     "pernosco-mcp": "./dist/cli.js"
   },
@@ -28,6 +32,6 @@
     "vitest": "^4.1.5"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }
