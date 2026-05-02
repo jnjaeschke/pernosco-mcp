@@ -3,5 +3,5 @@
   "description": "pernosco-mcp native messaging bridge",
   "path": "__PLACEHOLDER__",
   "type": "stdio",
-  "allowed_extensions": ["pernosco-mcp@mozilla.org"]
+  "allowed_extensions": ["pernosco-mcp@pernosco-mcp"]
 }

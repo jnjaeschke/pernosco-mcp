@@ -1,7 +1,7 @@
 import { lock } from 'proper-lockfile';
 import { spawn } from 'child_process';
 import fs from 'fs/promises';
-import { createWriteStream } from 'fs';
+import { openSync, closeSync } from 'fs';
 import path from 'path';
 import http from 'http';
 import os from 'os';
@@ -43,12 +43,13 @@ async function readServerJson(): Promise<ServerInfo | null> {
 async function spawnDaemon(): Promise<void> {
   const daemonScript = fileURLToPath(new URL('./daemon.js', import.meta.url));
   const logPath = path.join(CONFIG_DIR, 'daemon.log');
-  const logStream = createWriteStream(logPath, { flags: 'w' });
+  const fd = openSync(logPath, 'w');
   const child = spawn(process.execPath, [daemonScript], {
     detached: true,
-    stdio: ['ignore', logStream, logStream],
+    stdio: ['ignore', fd, fd],
   });
   child.unref();
+  closeSync(fd);
 }
 
 async function waitForDaemon(): Promise<number> {
