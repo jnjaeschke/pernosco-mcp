@@ -1,5 +1,5 @@
 import type { Daemon } from './daemon.js';
-import { pmlRowsToText, formatStdoutStderr, formatDynamicAnnotations, formatStack, asItemsRow } from './pml.js';
+import { pmlRowsToText, formatStdoutStderr, formatDynamicAnnotations, formatStack, asItemsRow, filterNavigableRows } from './pml.js';
 import type { Focus } from './models.js';
 
 export const TOOL_DEFS = [
@@ -100,7 +100,7 @@ export const TOOL_DEFS = [
   },
   {
     name: 'stdout_stderr',
-    description: 'Get all stdout/stderr output across the trace. Results include event IDs — use goto(index) to navigate to where output was printed.',
+    description: 'Get stdout/stderr output around the current focus position. Output is scoped to the current process — use goto to navigate to a content process first if needed. Results include event IDs for navigation.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -258,15 +258,26 @@ async function sessionConnect(daemon: Daemon, clientId: string, args: Record<str
   const traceId = extractTraceId(url);
 
   if (!daemon.hasTab(traceId)) {
-    const fullUrl = url.startsWith('http') ? url : `https://pernos.co/debug/${traceId}/index.html`;
-    daemon.requestOpenTab(fullUrl);
-    const loaded = await daemon.waitForTab(traceId);
-    if (!loaded) {
-      return err(`Timed out waiting for trace ${traceId} to load in Firefox. Is the Pernosco tab open?`);
+    // Wait briefly — extension may still be registering existing tabs
+    const alreadyOpen = await daemon.waitForTab(traceId, 3000);
+    if (!alreadyOpen) {
+      const fullUrl = url.startsWith('http') ? url : `https://pernos.co/debug/${traceId}/index.html`;
+      daemon.requestOpenTab(fullUrl);
+      const loaded = await daemon.waitForTab(traceId);
+      if (!loaded) {
+        return err(`Timed out waiting for trace ${traceId} to load in Firefox. Is the Pernosco tab open?`);
+      }
     }
   }
 
   daemon.bindClient(clientId, traceId);
+  try {
+    const backend = daemon.getBackend(clientId);
+    await backend.getStatus();
+  } catch (e) {
+    daemon.unbindClient(clientId);
+    return err(`Tab for trace ${traceId} found but not responding: ${e instanceof Error ? e.message : String(e)}. Is the Pernosco session fully loaded?`);
+  }
   return ok(`Connected to Pernosco trace ${traceId}`);
 }
 
@@ -306,7 +317,8 @@ async function findExecutions(daemon: Daemon, clientId: string, args: Record<str
   const params: Record<string, unknown> = { symbol };
   if (args.print_exprs) params.print = String(args.print_exprs);
   const backend = daemon.getBackend(clientId);
-  const rows = await backend.rangeQuery('execution', params, limit);
+  const allRows = await backend.rangeQuery('execution', params, limit);
+  const rows = filterNavigableRows(allRows);
   daemon.storeQueryResults(clientId, rows);
   const count = rows.length;
   const header = `Found ${count} call${count !== 1 ? 's' : ''} to ${symbol}:`;
@@ -325,6 +337,9 @@ async function evaluateTool(daemon: Daemon, clientId: string, args: Record<strin
   const backend = daemon.getBackend(clientId);
   const rows = await backend.simpleQuery('evaluate', { payload: { expression } });
   daemon.storeQueryResults(clientId, rows);
+  if (rows.length === 0) {
+    return err(`No result for "${expression}". Possible causes: no debug info at current position, expression not in scope, or optimized out. Try navigating to a function entry point first (use find_executions + goto).`);
+  }
   return ok(pmlRowsToText(rows));
 }
 
@@ -363,7 +378,8 @@ async function watchpointHistory(daemon: Daemon, clientId: string, args: Record<
   const type = requireString(args, 'type', 'Type');
   const limit = typeof args.limit === 'number' ? args.limit : 100;
   const backend = daemon.getBackend(clientId);
-  const rows = await backend.rangeQuery('watchpoint', { address, type }, limit);
+  const allRows = await backend.rangeQuery('watchpoint', { address, type }, limit);
+  const rows = filterNavigableRows(allRows);
   daemon.storeQueryResults(clientId, rows);
   const count = rows.length;
   return ok(`${count} write${count !== 1 ? 's' : ''} to ${address} (${type}):\n\n${pmlRowsToText(rows)}`);
@@ -372,7 +388,8 @@ async function watchpointHistory(daemon: Daemon, clientId: string, args: Record<
 async function stdoutStderr(daemon: Daemon, clientId: string, args: Record<string, unknown>): Promise<ToolResult> {
   const limit = typeof args.limit === 'number' ? args.limit : 200;
   const backend = daemon.getBackend(clientId);
-  const rows = await backend.rangeQuery('stdouterr', {}, limit);
+  const allRows = await backend.rangeQuery('stdouterr', {}, limit);
+  const rows = filterNavigableRows(allRows);
   daemon.storeQueryResults(clientId, rows);
   return ok(formatStdoutStderr(rows));
 }
@@ -417,7 +434,8 @@ async function findBreakpointHits(daemon: Daemon, clientId: string, args: Record
   const params: Record<string, unknown> = { url: file, points: [{ l: line, c: 0 }] };
   if (args.print_exprs) params.print = String(args.print_exprs);
   const backend = daemon.getBackend(clientId);
-  const rows = await backend.rangeQuery('breakpoint', params, limit);
+  const allRows = await backend.rangeQuery('breakpoint', params, limit);
+  const rows = filterNavigableRows(allRows);
   daemon.storeQueryResults(clientId, rows);
   const count = rows.length;
   return ok(`Found ${count} hit${count !== 1 ? 's' : ''} at ${file}:${line}:\n\n${pmlRowsToText(rows)}`);
@@ -470,7 +488,8 @@ async function watchVariable(daemon: Daemon, clientId: string, args: Record<stri
   }
   const address = addrMatch[0];
 
-  const rows = await backend.rangeQuery('watchpoint', { address, type }, limit);
+  const allRows = await backend.rangeQuery('watchpoint', { address, type }, limit);
+  const rows = filterNavigableRows(allRows);
   daemon.storeQueryResults(clientId, rows);
   const count = rows.length;
   return ok(`${count} write${count !== 1 ? 's' : ''} to ${expression} (${type} at ${address}):\n\n${pmlRowsToText(rows)}`);
@@ -492,7 +511,8 @@ async function stepToHit(daemon: Daemon, clientId: string, args: Record<string, 
   }
 
   const params: Record<string, unknown> = { url: file, points: [{ l: line, c: 0 }] };
-  const rows = await backend.rangeQuery('breakpoint', params, 50);
+  const allRows = await backend.rangeQuery('breakpoint', params, 50);
+  const rows = filterNavigableRows(allRows);
   daemon.storeQueryResults(clientId, rows);
 
   const candidates = rows

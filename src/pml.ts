@@ -1,5 +1,9 @@
 import type { PmlItemRow, PmlNode, PmlRow } from './models.js';
 
+export function filterNavigableRows(rows: PmlRow[]): PmlRow[] {
+  return rows.filter(row => asItemsRow(row) !== null);
+}
+
 export function pmlToText(node: PmlNode | string | null | undefined, depth = 0): string {
   if (node == null) return '';
   if (typeof node === 'string') return node;
@@ -51,6 +55,9 @@ export function asPmlNode(row: unknown): PmlNode | null {
   if (typeof r.t === 'string') return row as PmlNode;
   if (r.pml && typeof r.pml === 'object' && typeof (r.pml as Record<string, unknown>).t === 'string') {
     return r.pml as PmlNode;
+  }
+  if (r.name && typeof r.name === 'object' && typeof (r.name as Record<string, unknown>).t === 'string') {
+    return r.name as PmlNode;
   }
   return null;
 }

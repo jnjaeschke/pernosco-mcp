@@ -9,9 +9,11 @@ function mockDaemon(overrides: Partial<Record<keyof Daemon, unknown>> = {}): Dae
     getClientTraceId: vi.fn().mockReturnValue(null),
     listTabs: vi.fn().mockReturnValue([]),
     hasTab: vi.fn().mockReturnValue(false),
+    waitForTab: vi.fn().mockResolvedValue(false),
     requestOpenTab: vi.fn(),
     storeQueryResults: vi.fn(),
     getQueryFocus: vi.fn().mockReturnValue(null),
+    cleanupClient: vi.fn(),
     getBackend: vi.fn().mockReturnValue({
       getStatus: vi.fn().mockResolvedValue({
         focus: { moment: { event: 100, instr: 50 } },
