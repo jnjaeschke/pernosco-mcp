@@ -2,7 +2,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -42,7 +42,7 @@ function registerWindows() {
 
   const regKey = 'HKCU\\Software\\Mozilla\\NativeMessagingHosts\\pernosco_mcp_bridge';
   try {
-    execSync(`reg add "${regKey}" /ve /t REG_SZ /d "${resolvedManifest}" /f`, { stdio: 'pipe' });
+    execFileSync('reg', ['add', regKey, '/ve', '/t', 'REG_SZ', '/d', resolvedManifest, '/f'], { stdio: 'pipe' });
     console.log(`pernosco-mcp: native messaging host registered in registry (${regKey})`);
     return true;
   } catch (err) {

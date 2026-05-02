@@ -9,13 +9,21 @@
     "nativeMessaging",
     "https://pernos.co/*"
   ],
-  "content_scripts": [{
-    "matches": ["https://pernos.co/debug/*"],
-    "js": ["inject.js"],
-    "run_at": "document_idle"
-  }],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://pernos.co/debug/*"
+      ],
+      "js": [
+        "inject.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
   "background": {
-    "scripts": ["background.js"]
+    "scripts": [
+      "background.js"
+    ]
   },
   "applications": {
     "gecko": {

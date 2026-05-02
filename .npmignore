@@ -1,0 +1,10 @@
+extension/
+tests/
+scripts/
+docs/
+DESIGN.md
+.github/
+*.log
+*.xpi
+tsconfig.json
+src/
