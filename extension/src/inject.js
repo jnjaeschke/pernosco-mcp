@@ -61,7 +61,7 @@ function wrapActiveInto(obj) {
   return cloneInto(preWrap, window, { cloneFunctions: true });
 }
 
-const MAX_MOMENT = MAX_MOMENT;
+const MAX_MOMENT = 1125899906842624;
 
 /**
  * Build an "executions of" query centered around the UI's current position in
@@ -155,7 +155,12 @@ class BatchHandler {
   }
 
   onData(id, data) {
-    this.results.push(data);
+    try {
+      this.results.push(JSON.parse(JSON.stringify(data)));
+    } catch (e) {
+      console.warn('pernosco-mcp: failed to deep-clone query result', e);
+      this.results.push(data);
+    }
   }
 
   onClose(id, hasNoMore, noResults) {
@@ -266,7 +271,11 @@ class BridgeHelperView {
    * `options.annotation` until after this call is received.
    */
   onFocusChange(oldFocus, oldSource, settingView, options) {
-    this.bridge.sendStatusReport(options);
+    try {
+      this.bridge.sendStatusReport(options);
+    } catch (ex) {
+      console.error('pernosco-mcp: sendStatusReport failed in onFocusChange', ex);
+    }
   }
 
   /**
@@ -279,7 +288,11 @@ class BridgeHelperView {
    * until after this call is received.
    */
   updateFocusAnnotation(annotation) {
-    this.bridge.sendStatusReport({ annotation });
+    try {
+      this.bridge.sendStatusReport({ annotation });
+    } catch (ex) {
+      console.error('pernosco-mcp: sendStatusReport failed in updateFocusAnnotation', ex);
+    }
   }
 
   /**
@@ -310,15 +323,71 @@ class ContentScriptServer extends BridgeServer {
   constructor(iframe) {
     super({
       roleType: 'server',
-      // We need to use `wrappedJSObject` to disclaim the xray wrapper.
       pclient: window.wrappedJSObject.client,
     });
 
+    this._registerView();
+  }
+
+  _registerView() {
     this.wrappedBridgeHelperView = wrapActiveInto(new BridgeHelperView({
       pclient: this.pclient,
       bridge: this,
     }));
     this.pclient.addView(this.wrappedBridgeHelperView);
+  }
+
+  _refreshClient() {
+    const fresh = window.wrappedJSObject?.client;
+    if (!fresh) throw new Error('Pernosco client not available');
+    this.pclient = fresh;
+    this._registerView();
+  }
+
+  _isDeadObjectError(e) {
+    const s = String(e);
+    return s.includes('dead object') || s.includes("can't access");
+  }
+
+  _ensureClient() {
+    try {
+      void this.pclient.focus;
+    } catch (e) {
+      if (this._isDeadObjectError(e)) {
+        console.warn('pernosco-mcp: pclient was dead, re-acquiring');
+        this._refreshClient();
+      } else {
+        throw e;
+      }
+    }
+  }
+
+  _withRetry(fn) {
+    this._ensureClient();
+    try {
+      return fn();
+    } catch (e) {
+      if (this._isDeadObjectError(e)) {
+        console.warn('pernosco-mcp: dead object in handler, refreshing client and retrying');
+        this._refreshClient();
+        return fn();
+      }
+      throw e;
+    }
+  }
+
+  async _withRetryAsync(fn) {
+    this._ensureClient();
+    try {
+      return await fn();
+    } catch (e) {
+      if (this._isDeadObjectError(e)) {
+        console.warn('pernosco-mcp: dead object in async handler, refreshing client and retrying');
+        this._refreshClient();
+        return await fn();
+      }
+      throw e;
+    }
   }
 
   generateStatusReportPayload(options) {
@@ -351,10 +420,10 @@ class ContentScriptServer extends BridgeServer {
   }
 
   onMsg_focus({ focus, source }, reply) {
-    console.log('Setting focus to', focus);
-    this.pclient.willSetFocus(this.wrappedBridgeHelperView);
-    // TODO: Allow propagating the annotation.
-    this.pclient.setFocus(cloneData(focus), cloneData(source), this.wrappedBridgeHelperView, cloneData({}));
+    this._withRetry(() => {
+      this.pclient.willSetFocus(this.wrappedBridgeHelperView);
+      this.pclient.setFocus(cloneData(focus), source ? cloneData(source) : cloneData(null), this.wrappedBridgeHelperView, cloneData({}));
+    });
     if (reply) reply({ ok: true });
   }
 
@@ -363,98 +432,109 @@ class ContentScriptServer extends BridgeServer {
    * general
    */
   onMsg_statusReport({}, reply) {
-    reply(this.generateStatusReportPayload());
+    reply(this._withRetry(() => this.generateStatusReportPayload()));
   }
 
   /**
    *
    */
   onMsg_storageDump({}, reply) {
-    reply(this.pclient.storageData);
+    reply(this._withRetry(() => this.pclient.storageData));
   }
 
   async onMsg_getSource({ url, startLine, endLine }, reply) {
-    const sourceText = await new window.Promise((resolve) => {
-      this.pclient.requestSource(url, false, exportFunction(resolve, window));
+    await this._withRetryAsync(async () => {
+      const sourceText = await new window.Promise((resolve) => {
+        this.pclient.requestSource(url, false, exportFunction(resolve, window));
+      });
+
+      const text = sourceText.wrappedJSObject.originalText;
+      const allLines = text.split('\n');
+      const start = (startLine || 1) - 1;
+      const end = endLine || allLines.length;
+      const lines = allLines.slice(start, end);
+
+      reply({ url, lines });
     });
-
-    const text = sourceText.wrappedJSObject.originalText;
-    const allLines = text.split('\n');
-    const start = (startLine || 1) - 1;
-    const end = endLine || allLines.length;
-    const lines = allLines.slice(start, end);
-
-    reply({ url, lines });
   }
 
   async onMsg_simpleQuery({ name, mixArgs }, reply) {
-    console.log('processing simple query for', name);
-    let queryId;
-    try {
-      const req = await buildSimpleQuery(this.pclient, mixArgs);
-      const handler = new BatchHandler();
-      queryId = this._openQuery(name, cloneData(req), wrapActiveInto(handler));
-      const results = await handler.promise;
-      queryId = null;
+    await this._withRetryAsync(async () => {
+      console.log('processing simple query for', name);
+      let queryId;
+      try {
+        const req = await buildSimpleQuery(this.pclient, mixArgs);
+        const handler = new BatchHandler();
+        queryId = this._openQuery(name, cloneData(req), wrapActiveInto(handler));
+        const results = await handler.promise;
+        queryId = null;
 
-      reply(results)
-    } finally {
-      if (queryId) {
-        this.pclient.cancelQuery(queryId);
+        reply(results)
+      } finally {
+        if (queryId) {
+          this.pclient.cancelQuery(queryId);
+        }
       }
-    }
+    });
   }
 
   async onMsg_rangeQuery({ name, limit, mixArgs }, reply) {
-    console.log('processing range query', name, mixArgs);
-    let beforeQueryId, afterQueryId;
-    try {
-      const useLimit = limit || 50;
-      const [beforeReq, afterReq, focusMoment] = await buildRangeQuery(this.pclient, mixArgs, useLimit);
-      console.log("query", name, beforeReq, afterReq);
-      const beforeHandler = new BatchHandler();
-      beforeQueryId = this._openQuery(name, cloneData(beforeReq), wrapActiveInto(beforeHandler));
+    await this._withRetryAsync(async () => {
+      console.log('processing range query', name, mixArgs);
+      let beforeQueryId, afterQueryId;
+      try {
+        const useLimit = limit || 50;
+        const [beforeReq, afterReq, focusMoment] = await buildRangeQuery(this.pclient, mixArgs, useLimit);
+        console.log("query", name, beforeReq, afterReq);
+        const beforeHandler = new BatchHandler();
+        beforeQueryId = this._openQuery(name, cloneData(beforeReq), wrapActiveInto(beforeHandler));
 
-      const afterHandler = new BatchHandler();
-      afterQueryId = this._openQuery(name, cloneData(afterReq), wrapActiveInto(afterHandler));
+        const afterHandler = new BatchHandler();
+        afterQueryId = this._openQuery(name, cloneData(afterReq), wrapActiveInto(afterHandler));
 
-      const beforeResults = await beforeHandler.promise;
-      beforeQueryId = null;
-      const afterResults = await afterHandler.promise;
-      afterQueryId = null;
+        const beforeResults = await beforeHandler.promise;
+        beforeQueryId = null;
+        const afterResults = await afterHandler.promise;
+        afterQueryId = null;
 
-      // The before results end up being provided in descending order which is
-      // annoying for our purposes, so reverse them.
-      beforeResults.reverse();
+        beforeResults.reverse();
 
-      const results = [...beforeResults, ...afterResults];
-      const extra = {
-        focusMoment,
-        beforeCount: beforeResults.length,
-        afterCount: afterResults.length,
-        limit: useLimit,
-      };
+        const results = [...beforeResults, ...afterResults];
+        const extra = {
+          focusMoment,
+          beforeCount: beforeResults.length,
+          afterCount: afterResults.length,
+          limit: useLimit,
+        };
 
-      reply(results, extra);
-    } finally {
-      // Ensure we always terminate the query on the way out if initialized and
-      // we're not sure it closed.
-      if (beforeQueryId) {
-        this.pclient.cancelQuery(beforeQueryId);
+        reply(results, extra);
+      } finally {
+        if (beforeQueryId) {
+          this.pclient.cancelQuery(beforeQueryId);
+        }
+        if (afterQueryId) {
+          this.pclient.cancelQuery(afterQueryId);
+        }
       }
-      if (afterQueryId) {
-        this.pclient.cancelQuery(afterQueryId);
-      }
-    }
+    });
   }
 }
 
 async function init() {
+  if (globalThis.server) {
+    browser.runtime.sendMessage({ type: 'contentScriptReady', url: window.location.href }).catch(() => {});
+    return;
+  }
+
+  if (globalThis._pernoscoMcpInitializing) return;
+  globalThis._pernoscoMcpInitializing = true;
+
   const maxWait = 15000;
   const start = Date.now();
   while (!window.wrappedJSObject?.client) {
     if (Date.now() - start > maxWait) {
       console.error('pernosco-mcp: window.client not available after 15s');
+      globalThis._pernoscoMcpInitializing = false;
       return;
     }
     await new Promise(r => setTimeout(r, 250));
@@ -462,9 +542,11 @@ async function init() {
 
   try {
     globalThis.server = new ContentScriptServer();
+    browser.runtime.sendMessage({ type: 'contentScriptReady', url: window.location.href }).catch(() => {});
   } catch (ex) {
     console.error('pernosco-mcp:', ex);
   }
+  globalThis._pernoscoMcpInitializing = false;
 }
 
 init();
