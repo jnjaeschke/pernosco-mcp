@@ -8,7 +8,7 @@ let pendingMessages = [];
 const MAX_PENDING = 200;
 let nextMsgId = 0;
 
-// Map: tabId → { traceId, port, pendingReplies: Map<localReplyId, daemonReplyId> }
+// Map: tabId → { traceId, port, pendingReplies: Map<localReplyId, daemonReplyId>, cookieStoreId }
 const tabs = new Map();
 
 // ─── Native messaging / daemon connection ────────────────────────────────────
@@ -78,9 +78,13 @@ function sendToDaemon(msg) {
 
 function handleDaemonMessage(msg) {
   switch (msg.type) {
-    case 'openTab':
-      browser.tabs.create({ url: msg.url });
+    case 'openTab': {
+      const opts = { url: msg.url };
+      const cid = findPernoscoContainer();
+      if (cid) opts.cookieStoreId = cid;
+      browser.tabs.create(opts);
       return;
+    }
 
     case 'listTabs': {
       const tabList = Array.from(tabs.values()).map(e => ({ traceId: e.traceId }));
@@ -151,11 +155,20 @@ function findTabByTraceId(traceId) {
   return null;
 }
 
+function findPernoscoContainer() {
+  for (const entry of tabs.values()) {
+    if (entry.cookieStoreId && entry.cookieStoreId !== 'firefox-default') {
+      return entry.cookieStoreId;
+    }
+  }
+  return null;
+}
+
 // ─── Content script routing ───────────────────────────────────────────────────
 
-function connectToTab(tabId, traceId, attempt = 0) {
+function connectToTab(tabId, traceId, cookieStoreId = null, attempt = 0) {
   const port = browser.tabs.connect(tabId, { name: 'pernosco-mcp' });
-  const entry = { traceId, port, pendingReplies: new Map() };
+  const entry = { traceId, port, pendingReplies: new Map(), cookieStoreId };
   tabs.set(tabId, entry);
 
   port.onMessage.addListener(msg => {
@@ -177,7 +190,7 @@ function connectToTab(tabId, traceId, attempt = 0) {
         browser.tabs.get(tabId).then(tab => {
           const match = tab.url && PERNOSCO_URL_PATTERN.exec(tab.url);
           if (match && !tabs.has(tabId)) {
-            connectToTab(tabId, match[1], attempt + 1);
+            connectToTab(tabId, match[1], tab.cookieStoreId, attempt + 1);
           }
         }).catch(() => {});
       }, 2000);
@@ -194,7 +207,7 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   const match = tab.url && PERNOSCO_URL_PATTERN.exec(tab.url);
   if (!match) return;
   if (!tabs.has(tabId)) {
-    connectToTab(tabId, match[1]);
+    connectToTab(tabId, match[1], tab.cookieStoreId);
   }
 });
 
@@ -206,14 +219,26 @@ browser.tabs.onRemoved.addListener(tabId => {
   }
 });
 
+browser.runtime.onMessage.addListener((msg, sender) => {
+  if (msg.type === 'contentScriptReady' && sender.tab?.id !== undefined) {
+    const match = msg.url && PERNOSCO_URL_PATTERN.exec(msg.url);
+    if (match && !tabs.has(sender.tab.id)) {
+      connectToTab(sender.tab.id, match[1], sender.tab.cookieStoreId);
+    }
+  }
+});
+
 // Connect to already-open Pernosco tabs on extension startup
 browser.tabs.query({ url: 'https://pernos.co/debug/*' }).then(existingTabs => {
   for (const tab of existingTabs) {
     if (tab.id === undefined) continue;
     const match = tab.url && PERNOSCO_URL_PATTERN.exec(tab.url);
     if (match && !tabs.has(tab.id)) {
-      connectToTab(tab.id, match[1]);
+      connectToTab(tab.id, match[1], tab.cookieStoreId);
     }
+    // Re-inject content script in case it wasn't loaded (e.g. session-restored tabs)
+    browser.tabs.executeScript(tab.id, { file: 'inject.js', runAt: 'document_idle' })
+      .catch(err => console.warn('pernosco-mcp: executeScript failed for tab', tab.id, err));
   }
 });
 

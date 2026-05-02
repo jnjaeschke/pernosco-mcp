@@ -5,7 +5,9 @@
   "description": "Bridges Claude Code to Pernosco debugging sessions via pernosco-mcp daemon",
   "permissions": [
     "tabs",
-    "nativeMessaging"
+    "cookies",
+    "nativeMessaging",
+    "https://pernos.co/*"
   ],
   "content_scripts": [{
     "matches": ["https://pernos.co/debug/*"],
