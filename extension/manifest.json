@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "pernosco-mcp",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "Bridges Claude Code to Pernosco debugging sessions via pernosco-mcp daemon",
   "permissions": [
     "tabs",
@@ -24,9 +24,14 @@
       "background.js"
     ]
   },
-  "applications": {
+  "browser_specific_settings": {
     "gecko": {
-      "id": "pernosco-mcp@pernosco-mcp"
+      "id": "pernosco-mcp@pernosco-mcp",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
     }
   }
 }
