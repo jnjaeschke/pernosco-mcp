@@ -5,7 +5,7 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jnjaeschke/pernosco-mcp.git"
+    "url": "git+https://github.com/jnjaeschke/pernosco-mcp.git"
   },
   "bin": {
     "pernosco-mcp": "./dist/cli.js"
