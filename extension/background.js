@@ -1,6 +1,8 @@
 // background.js — pernosco-mcp Firefox extension background script
 
 const PERNOSCO_URL_PATTERN = /^https:\/\/pernos\.co\/debug\/([^/]+)\//;
+// Keep in sync with PROTOCOL_VERSION in src/daemon.ts
+const PROTOCOL_VERSION = 1;
 
 let daemonWs = null;
 let daemonPort = null;
@@ -34,7 +36,7 @@ function connectDaemon(port) {
   daemonWs = new WebSocket(`ws://127.0.0.1:${port}`);
 
   daemonWs.onopen = () => {
-    daemonWs.send(JSON.stringify({ type: 'register_extension', version: '0.1.0-dirty' }));
+    daemonWs.send(JSON.stringify({ type: 'register_extension', version: browser.runtime.getManifest().version, protocol: PROTOCOL_VERSION }));
     for (const msg of pendingMessages) daemonWs.send(JSON.stringify(msg));
     pendingMessages = [];
     for (const entry of tabs.values()) {

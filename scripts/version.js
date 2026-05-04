@@ -24,20 +24,9 @@ writeFileSync(
 );
 
 // Extension manifest — AMO requires numeric-only versions (no git suffix)
-const manifestPath = new URL('../extension/static/manifest.json', import.meta.url);
+const manifestPath = new URL('../extension/manifest.json', import.meta.url);
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 if (manifest.version !== semver && /^\d+\.\d+\.\d+$/.test(semver)) {
   manifest.version = semver;
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
-}
-
-// Extension background.js version string
-const bgPath = new URL('../extension/src/background.js', import.meta.url);
-let bg = readFileSync(bgPath, 'utf8');
-const bgUpdated = bg.replace(
-  /version: '[^']*'/,
-  `version: '${version}'`
-);
-if (bgUpdated !== bg) {
-  writeFileSync(bgPath, bgUpdated);
 }

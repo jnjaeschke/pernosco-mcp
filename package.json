@@ -12,7 +12,7 @@
   },
   "scripts": {
     "build": "node scripts/version.js && tsc",
-    "build:extension": "cd extension && npx webpack && cd dist && zip -r ../../pernosco-mcp.xpi . && cd ../..",
+    "build:extension": "cd extension && zip -r ../pernosco-mcp.xpi manifest.json background.js inject.js",
     "build:all": "npm run build && npm run build:extension",
     "postinstall": "node scripts/postinstall.js",
     "test": "vitest run",

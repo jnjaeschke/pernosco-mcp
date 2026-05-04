@@ -12,26 +12,22 @@ A background daemon coordinates between any number of Claude Code instances and 
 
 ## Installation
 
-### 1. Install and build
+### 1. Install the npm package
 
 ```bash
-git clone <repo-url>
-cd pernosco-mcp
-npm install        # also registers the native messaging host for Firefox
-npm run build:all
+npm install -g pernosco-mcp
 ```
 
-### 2. Load the Firefox extension
+This installs the MCP server and registers the native messaging host for Firefox.
 
-1. Go to `about:debugging` > "This Firefox" > "Load Temporary Add-on"
-2. Select `extension/dist/manifest.json`
+### 2. Install the Firefox extension
 
-> Temporary add-ons are removed on Firefox restart. Reload after each restart.
+Install from [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/pernosco-mcp/).
 
 ### 3. Add to Claude Code
 
 ```bash
-claude mcp add pernosco -- node /absolute/path/to/pernosco-mcp/dist/cli.js
+claude mcp add pernosco -- pernosco-mcp
 ```
 
 ## Usage
@@ -70,11 +66,24 @@ claude mcp add pernosco -- node /absolute/path/to/pernosco-mcp/dist/cli.js
 
 ## Development
 
+### Building from source
+
+```bash
+git clone https://github.com/jnjaeschke/pernosco-mcp.git
+cd pernosco-mcp
+npm install
+npm run build:all
+```
+
+Load the extension manually via `about:debugging` > "This Firefox" > "Load Temporary Add-on" > select `extension/manifest.json`.
+
+### Scripts
+
 ```bash
 npm run dev              # Watch mode (TypeScript)
 npm test                 # Run tests
 npm run build            # Build server
-npm run build:extension  # Build extension + .xpi
+npm run build:extension  # Package extension .xpi
 npm run build:all        # Build everything
 ```
 

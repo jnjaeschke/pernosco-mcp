@@ -25,9 +25,7 @@ jobs:
       - run: npm test
 
       - name: Build extension
-        run: |
-          cd extension && npm ci && npx webpack && cd ..
-          cd extension/dist && zip -r ../../pernosco-mcp.xpi . && cd ../..
+        run: cd extension && zip -r ../pernosco-mcp.xpi manifest.json background.js inject.js
 
       - name: Publish to npm
         run: npm publish --access public

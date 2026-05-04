@@ -16,6 +16,8 @@ import { asItemsRow } from './pml.js';
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 const QUERY_TIMEOUT_MS = 30_000;
+// Keep in sync with PROTOCOL_VERSION in extension/src/background.js
+const PROTOCOL_VERSION = 1;
 
 export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
@@ -179,9 +181,9 @@ export class Daemon {
       if (msg.type === 'register_shim') {
         this.handleShimConnect(ws, String(msg.clientId ?? crypto.randomUUID()));
       } else if (msg.type === 'register_extension') {
-        const extVersion = typeof msg.version === 'string' ? msg.version : 'unknown';
-        if (extVersion !== VERSION) {
-          console.warn(`pernosco-mcp: extension version ${extVersion} != daemon version ${VERSION}. Consider reloading the extension.`);
+        const extProtocol = typeof msg.protocol === 'number' ? msg.protocol : 0;
+        if (extProtocol !== PROTOCOL_VERSION) {
+          console.warn(`pernosco-mcp: extension protocol ${extProtocol} != daemon protocol ${PROTOCOL_VERSION}. Update the extension or npm package.`);
         }
         this.handleExtensionConnect(ws);
       } else {
