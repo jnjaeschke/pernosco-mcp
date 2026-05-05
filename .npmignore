@@ -1,6 +1,6 @@
 extension/
 tests/
-scripts/
+scripts/version.js
 docs/
 DESIGN.md
 .github/
